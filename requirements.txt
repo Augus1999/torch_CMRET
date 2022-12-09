@@ -1,0 +1,4 @@
+torch>=1.13.0
+ase>=3.22.0
+clint
+requests

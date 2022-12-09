@@ -1,0 +1,306 @@
+# -*- coding: utf-8 -*-
+# Author: Nianze A. TAO (Omozawa SUENO)
+"""
+Useful tools (hopefully :)
+"""
+import os
+import re
+import glob
+import random
+import logging
+from pathlib import Path
+from typing import Optional, List, Dict, Union, Generator
+import torch
+import torch.nn as nn
+import torch.optim as op
+from torch import Tensor
+from torch.utils.data import DataLoader
+
+
+def energy_force_loss(
+    out: Dict[str, Tensor],
+    label: Dict[str, Tensor],
+    loss_f: object,
+    raw: bool = False,
+) -> Union[Tensor, Dict]:
+    """
+    Claculate the energy-force loss
+
+    :param out: output of model
+    :param label: training set label
+    :param loss_f: loss function
+    :param raw: whether output raw losses
+    :return: energy-force loss
+    """
+    rho = 0.2
+    energy, forces = label["E"], label["F"]
+    out_en, out_forces = out["energy"], out["force"]
+    loss1 = loss_f(out_en, energy)
+    loss2 = loss_f(out_forces, forces)
+    if raw:
+        return {"energy": loss1, "force": loss2}
+    loss = loss1 * rho + loss2 * (1 - rho)
+    return loss
+
+
+def energy_loss(
+    out: Dict[str, Tensor],
+    label: Dict[str, Tensor],
+    loss_f: object,
+    raw: bool = False,
+) -> Union[Tensor, Dict]:
+    """
+    Claculate the energy loss
+
+    :param out: output of model
+    :param label: training set label
+    :param loss_f: loss function
+    :param raw: whether output raw loss
+    :return: energy loss
+    """
+    energy = label["E"]
+    out_en = out["energy"]
+    loss = loss_f(out_en, energy)
+    if raw:
+        return {"energy": loss}
+    return loss
+
+
+def train(
+    model: nn.Module,
+    train_set: DataLoader,
+    max_n_epochs: int = 10000,
+    lrs: List[float] = [1e-4, 1e-6],
+    loss_calculator=energy_force_loss,
+    unit: str = "eV",
+    load: Optional[str] = None,
+    log_dir: Optional[str] = None,
+    work_dir: str = "workdir",
+    save_every: Optional[int] = None,
+) -> None:
+    """
+    Trian the network.
+
+    :param model: model for training
+    :param train_set: training set
+    :param max_n_epochs: max training epochs size
+    :param lrs: max and min learning rate
+    :param loss_calculator: loss calculator
+    :param unit: dataset energy unit
+    :param load: load from an existence state file <file>
+    :param log_dir: where to store log file <file>
+    :param work_dir: where to store model state_dict <path>
+    :param save_every: store checkpoint every 'save_every' epochs
+    :return: None
+    """
+    if os.path.exists(str(log_dir)):
+        with open(log_dir, mode="r+", encoding="utf-8") as f:
+            f.truncate()
+    if not os.path.exists(work_dir):
+        os.makedirs(work_dir)
+    logging.basicConfig(
+        filename=log_dir,
+        format=" %(asctime)s %(levelname)s: %(message)s",
+        level=logging.DEBUG,
+    )
+    start_epoch: int = 0
+    train_size = len(train_set)
+    lr_max, lr_min = max(lrs), min(lrs)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device=device).train()
+    optimizer = op.Adam(model.parameters(), lr=lr_min, amsgrad=False)
+    scheduler = op.lr_scheduler.CyclicLR(
+        optimizer=optimizer,
+        base_lr=lr_min,
+        max_lr=lr_max,
+        step_size_up=100000,
+        step_size_down=max_n_epochs * train_size - 100000,
+        cycle_momentum=False,
+    )
+    logging.info(f"using hardware {device}")
+    logging.debug(f"{model.check_parameter_number} trainable parameters")
+    if load:
+        with open(load, mode="rb") as sf:
+            state_dic = torch.load(sf, map_location=device)
+        keys = {"nn", "opt", "epoch", "scheduler"}
+        if keys & set(state_dic.keys()) == keys:
+            model.load_state_dict(state_dict=state_dic["nn"])
+            scheduler.load_state_dict(state_dict=state_dic["scheduler"])
+            start_epoch: int = state_dic["epoch"]
+            optimizer.load_state_dict(state_dict=state_dic["opt"])
+        else:
+            model.load_state_dict(state_dict=state_dic["nn"])
+        logging.info(f'loaded state from "{load}"')
+    train_loss = nn.MSELoss()
+    logging.info("start training")
+    for epoch in range(start_epoch, max_n_epochs):
+        running_loss = 0.0
+        for d in train_set:
+            mol, label = d["mol"], d["label"]
+            for i in mol:
+                mol[i] = mol[i].to(device)
+            for j in label:
+                label[j] = label[j].to(device)
+            out = model(mol)
+            loss = loss_calculator(out, label, train_loss)
+            running_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            model.zero_grad(set_to_none=True)
+            scheduler.step()  # update scheduler after optimised
+        logging.info(f"epoch: {epoch + 1} loss: {running_loss / train_size}")
+        if save_every:
+            if (epoch + 1) % save_every == 0:
+                state = {
+                    "nn": model.state_dict(),
+                    "opt": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "epoch": epoch + 1,
+                    "unit": unit,
+                }
+                torch.save(
+                    state,
+                    Path(work_dir)
+                    / f"state-{str(epoch + 1).zfill(len(str(max_n_epochs)))}.pkl",
+                )
+                logging.info(
+                    f"saved checkpoint state-{str(epoch + 1).zfill(len(str(max_n_epochs)))}.pkl"
+                )
+    torch.save(
+        {"nn": model.state_dict(), "unit": unit},
+        Path(work_dir) / r"trained.pt",
+    )
+    logging.info("saved state!")
+    logging.info("finished")
+
+
+def test(
+    model: nn.Module,
+    dataset: Generator,
+    load: str,
+    loss_calculator=energy_force_loss,
+    metric_type: str = "MAE",
+) -> Dict[str, float]:
+    """
+    Test the trained network.
+
+    :param model: model for testing
+    :param dataset: dataset class
+    :param load: load from an existence state file <file>
+    :param loss_calculator: loss calculator
+    :param metric_type: chosen from 'MAE' and 'RMSE'
+    :return: MAE of target
+    """
+    loader = DataLoader(dataset=dataset, batch_size=50)
+    size = len(loader)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.pretrained(file=load).to(device=device).eval()
+    if metric_type == "MAE":
+        Loss = nn.L1Loss()
+    elif metric_type == "RMSE":
+        Loss = nn.MSELoss()
+    else:
+        raise NotImplementedError
+    results = {}
+    for d in loader:
+        mol, label = d["mol"], d["label"]
+        for i in mol:
+            mol[i] = mol[i].to(device)
+        for j in label:
+            label[j] = label[j].to(device)
+        out = model(mol)
+        result = loss_calculator(out, label, Loss, True)
+        for key in result:
+            if key not in results:
+                results[key] = result[key].item()
+            else:
+                results[key] += result[key].item()
+    for key in results:
+        if metric_type == "MAE":
+            results[key] = results[key] / size
+        if metric_type == "RMSE":
+            results[key] = results[key] ** 0.5 / size
+    return results
+
+
+def find_recent_checkpoint(workdir: str) -> Optional[str]:
+    """
+    Find the most recent checkpoint file in the work dir. \n
+    The name of checkpoint file is like state-abcdef.pkl
+
+    :param workdir: the directory where the checkpoint files stored <path>
+    :return: the file name
+    """
+    load: Optional[str] = None
+    if os.path.exists(workdir):
+        cps = list(glob.glob(str(Path(workdir) / r"*.pkl")))
+        if cps:
+            cps.sort(key=lambda x: int(os.path.basename(x).split(".")[0].split("-")[1]))
+            load = cps[-1]
+    return load
+
+
+def extract_log_info(log_name: str = "training.log") -> Dict[str, List]:
+    """
+    Extract training loss from training log file.
+
+    :param log_name: log file name <file>
+    :return: dict["epoch": epochs, "loss": loss]
+    """
+    info = {"epoch": [], "loss": []}
+    with open(log_name, mode="r", encoding="utf-8") as f:
+        lines = f.read()
+    loss_info = re.findall(r"epoch: \d+ loss: \d+.\d+", lines)
+    if loss_info:
+        for i in loss_info:
+            epoch = int(i.split(" ")[1])
+            loss = float(i.split(" ")[-1])
+            info["epoch"].append(epoch)
+            info["loss"].append(loss)
+    return info
+
+
+def split_data(file_name: Union[str, Path], fraction: float = 0.8) -> bool:
+    """
+    Split a dataset to file_name-train.xyz and file_name-test.xyz files.
+
+    :param file_name: file to be splited <file>
+    :param fraction: fraction = n_train / n_total, value: (0, 1)
+    :return: True if n_test != 0 else False
+    """
+    assert str(file_name).endswith(".xyz"), "Unsupported format..."
+    assert 0 < fraction < 1, "invalid value of parmater 'fraction'..."
+    with open(file_name, mode="r", encoding="utf-8") as f:
+        lines = f.readlines()
+    line_indexes = []
+    lines_group, lines_ = [], []
+    for idx, line in enumerate(lines):
+        try:
+            int(line)
+            line_indexes.append(idx)
+        except ValueError:
+            pass
+    l_i_len = len(line_indexes)
+    for key, idx in enumerate(line_indexes):
+        mol_info = lines[idx : line_indexes[key + 1] if (key + 1) < l_i_len else None]
+        lines_group.append(mol_info)
+    random.shuffle(lines_group)
+    for i in lines_group:
+        for j in i:
+            lines_.append(j)
+    train_set_idx = int(l_i_len * fraction)
+    if train_set_idx == l_i_len:
+        return False
+    with open(
+        str(file_name).replace(".xyz", "-train.xyz"), mode="w", encoding="utf-8"
+    ) as sf:
+        sf.writelines(lines_[: line_indexes[train_set_idx]])
+    with open(
+        str(file_name).replace(".xyz", "-test.xyz"), mode="w", encoding="utf-8"
+    ) as sf:
+        sf.writelines(lines_[line_indexes[train_set_idx] :])
+    return True
+
+
+if __name__ == "__main__":
+    ...
