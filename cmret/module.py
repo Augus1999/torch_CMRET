@@ -197,7 +197,7 @@ class CFConv(nn.Module):
             # simplified CFConv
             v = x.unsqueeze(dim=-2) * w * mask
         else:
-            # CFConv
+            # CFConv: loop_mask helps to remove self-loop
             n_b, n_a, f = x.shape
             x_nbs = x.unsqueeze(dim=-3).repeat(1, n_a, 1, 1)
             x_nbs = x_nbs[loop_mask == 0].view(n_b, n_a, n_a - 1, f)
