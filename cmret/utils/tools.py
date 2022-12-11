@@ -177,7 +177,7 @@ def train(
 def test(
     model: nn.Module,
     dataset: Generator,
-    load: str,
+    load: Optional[str] = None,
     loss_calculator=energy_force_loss,
     metric_type: str = "MAE",
 ) -> Dict[str, float]:
