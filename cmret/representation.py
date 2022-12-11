@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch import Tensor
 from .embedding import Embedding
 from .output import EquivarientDipoleMoment, EquivarientScalar
-from .module import Interaction, Distance, CosinCutOff, RBF, RBF2
+from .module import Interaction, Distance, CosinCutOff, RBF, RBF2, RBF3
 
 
 __all__ = ["CMRETModel"]
@@ -37,7 +37,8 @@ class CMRET(nn.Module):
         :param n_kernel: number of RBF kernels
         :param n_atom_basis: number of atomic basis
         :param n_interaction: number of interaction blocks
-        :param rbf_type: type of rbf basis: 'bessel' or 'gaussian'
+        :param rbf_type: type of rbf basis: 'bessel', 'gaussian' or 'spherical'
+                         choosing 'spherical' to allow higher order MP (L = 3)
         :param num_head: number of attention head per layer
         :param attention_activation: attention activation function type
         :param simplified_cfconv: whether using simplified CFConv scheme
@@ -53,6 +54,8 @@ class CMRET(nn.Module):
             self.rbf = RBF(cell=cutoff, n_kernel=n_kernel)
         elif rbf_type == "gaussian":
             self.rbf = RBF2(cell=cutoff, n_kernel=n_kernel)
+        elif rbf_type == "spherical":
+            self.rbf = RBF3(cell=cutoff, n_kernel=n_kernel)
         else:
             raise NotImplementedError
         self.cutoff = CosinCutOff(cutoff=cutoff)
@@ -95,7 +98,11 @@ class CMRET(nn.Module):
         d, d_vec = self.distance(r)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
-        e = cutoff * self.rbf(d)
+        e_ = self.rbf(d=d, d_vec=d_vec)
+        if e_.dim() == 4:
+            e = cutoff * e_
+        else:
+            e = cutoff.unsqueeze(dim=-2) * e_
         d_vec_norm = (mask * d_vec / d.unsqueeze(dim=-1)).unsqueeze(dim=-1)
         s = self.embedding(z)
         s_o = 0
@@ -128,7 +135,8 @@ class CMRETModel(nn.Module):
         :param n_atom_basis: number of atomic basis
         :param n_interaction: number of interaction blocks
         :param n_output: number of output blocks
-        :param rbf_type: type of rbf basis: 'bessel' or 'gaussian'
+        :param rbf_type: type of rbf basis: 'bessel', 'gaussian' or 'spherical'
+                         choosing 'spherical' to allow higher order MP (L = 3)
         :param num_head: number of attention head per layer
         :param attention_activation: attention activation function type
         :param simplified_cfconv: whether using simplified CFConv scheme
@@ -169,11 +177,12 @@ class CMRETModel(nn.Module):
         """
         return self.model(mol)
 
-    def pretrained(self, file: str) -> nn.Module:
-        with open(file, mode="rb") as f:
-            state_dict = torch.load(f, map_location="cpu")
-        self.load_state_dict(state_dict=state_dict["nn"])
-        self.unit = state_dict["unit"]
+    def pretrained(self, file: Optional[str]) -> nn.Module:
+        if file:
+            with open(file, mode="rb") as f:
+                state_dict = torch.load(f, map_location="cpu")
+            self.load_state_dict(state_dict=state_dict["nn"])
+            self.unit = state_dict["unit"]
         return self
 
     @property

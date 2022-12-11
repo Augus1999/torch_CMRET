@@ -36,11 +36,12 @@ class RBF(nn.Module):
         offsets = torch.linspace(1.0, n_kernel, n_kernel)
         self.register_buffer("offsets", offsets[None, None, None, :])
 
-    def forward(self, d: Tensor) -> Tensor:
+    def forward(self, **karg) -> Tensor:
         """
         :param d: a tensor of distances;  shape: (n_b, n_a, n_a - 1)
         :return: RBF-extanded distances;  shape: (n_b, n_a, n_a - 1, n_k)
         """
+        d = karg["d"]
         out = (
             torch.pi * self.offsets * d.unsqueeze(dim=-1) / self.cell
         ).sin() / d.unsqueeze(dim=-1)
@@ -65,13 +66,45 @@ class RBF2(nn.Module):
         self.offsets = nn.Parameter(offsets, requires_grad=True)
         self.coeff = nn.Parameter(coeff / 4, requires_grad=True)
 
-    def forward(self, d: Tensor) -> Tensor:
+    def forward(self, **karg) -> Tensor:
         """
         :param d: a tensor of distances;  shape: (n_b, n_a, n_a - 1)
         :return: RBF-extanded distances;  shape: (n_b, n_a, n_a - 1, n_k)
         """
+        d = karg["d"]
         out = (-self.coeff * ((-d.unsqueeze(dim=-1)).exp() - self.offsets).pow(2)).exp()
         return out
+
+
+class RBF3(nn.Module):
+    def __init__(self, cell: float = 5.0, n_kernel: int = 20) -> None:
+        """
+        Spherical RBF kernel for 3D input.
+
+        :param cell: unit cell length
+        :param n_kernel: number of kernels
+        """
+        super().__init__()
+        self.bessel = RBF(cell=cell, n_kernel=n_kernel)
+        self.sphere = Sphere()
+
+    def forward(self, **karg) -> Tensor:
+        """
+        :param d: a tensor of distances;  shape: (n_b, n_a, n_a - 1)
+        :param d_vec: pair-wise vector;   shape: (n_b, n_a, n_a - 1, 3)
+        :return: RBF-extanded distances;  shape: (n_b, n_a, n_a - 1, 3, n_k)
+        """
+        d, d_vec = karg["d"], karg["d_vec"]
+        d_e = self.bessel(d=d).unsqueeze(dim=-2)
+        theta = self.sphere(d_vec)
+        theta = theta.unsqueeze(dim=-1)
+        offsets = torch.linspace(1.0, 3.0, 3)[None, None, None, :]
+        harmonic = (
+            ((2 * offsets + 1) / 4 * torch.pi).sqrt()
+            * (-theta.sin().pow(2)).pow(offsets)
+            * (-theta.sin() * theta.cos()).pow(offsets)
+        )
+        return d_e * harmonic.unsqueeze(dim=-1)
 
 
 class CosinCutOff(nn.Module):
@@ -122,16 +155,16 @@ class Sphere(nn.Module):
         """
         super().__init__()
 
-    def forward(self, d: Tensor, d_vec: Tensor) -> Tuple[Tensor]:
+    def forward(self, d_vec: Tensor) -> Tensor:
         """
         :param d: distances;    shape: (n_b, n_a, n_a - 1)
         :param d_vec: vectors;  shape: (n_b, n_a, n_a - 1, 3)
-        :return: theta, phi;    shape: (n_b, n_a, n_a - 1), (n_b, n_a, n_a - 1)
+        :return: theta values;  shape: (n_b, n_a, n_a - 1)
         """
         theta = torch.atan2(d_vec[..., 1], d_vec[..., 0])
         theta += (theta < 0).type_as(theta) * (2 * torch.pi)
-        phi = torch.acos(d_vec[..., 2] / d)
-        return theta, phi
+        # phi = torch.acos(d_vec[..., 2] / d)
+        return theta
 
 
 class ResML(nn.Module):
@@ -187,21 +220,29 @@ class CFConv(nn.Module):
         """
         :param x: input info;              shape: (n_b, n_a, n_f)
         :param e: extended tensor;         shape: (n_b, n_a, n_a - 1, n_k)
+                                               or (n_b, n_a, n_a - 1, 3, n_k)
         :param mask: neighbour mask;       shape: (n_b, n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;  shape: (n_b, n_a, n_a)
         :return: convoluted info;          shape: (n_b, n_a, n_a - 1, n_f) * 3
+                                               or (n_b, n_a, n_a - 1, 3, n_f) * 3
         """
         w = self.w(e)
         x = self.phi(x)
         if loop_mask is None:
             # simplified CFConv
-            v = x.unsqueeze(dim=-2) * w * mask
+            if w.dim() == 4:
+                v = x.unsqueeze(dim=-2) * w * mask
+            else:
+                v = x[:, :, None, None, :] * w * mask.unsqueeze(dim=-2)
         else:
             # CFConv: loop_mask helps to remove self-loop
             n_b, n_a, f = x.shape
             x_nbs = x.unsqueeze(dim=-3).repeat(1, n_a, 1, 1)
             x_nbs = x_nbs[loop_mask == 0].view(n_b, n_a, n_a - 1, f)
-            v = x_nbs * w * mask
+            if w.dim() == 4:
+                v = x_nbs * w * mask
+            else:  # higher order L = 3
+                v = x_nbs.unsqueeze(dim=-2) * w * mask.unsqueeze(dim=-2)
         s1, s2, s3 = torch.split(
             v,
             split_size_or_sections=self.n_feature,
@@ -320,17 +361,23 @@ class Interaction(nn.Module):
             split_size_or_sections=self.n_feature,
             dim=-1,
         )
+        s1_sum = s1.sum(dim=-2) if s1.dim() == 4 else s1.sum(dim=[-3, -2])
         s_n1, s_n2, s_n3 = torch.split(
-            self.o(s + self.nonloacl(s) + s1.sum(dim=-2)),
+            self.o(s + self.nonloacl(s) + s1_sum),
             split_size_or_sections=self.n_feature,
             dim=-1,
         )
         s_m = s_n1 + s_n2 * (v1 * v2).sum(dim=-2)
         s_out = self.res(s_m)
-        v_m = s_n3.unsqueeze(dim=-2) * v3 + (
-            s2.unsqueeze(dim=-2) * v.unsqueeze(dim=-3)
-            + s3.unsqueeze(dim=-2) * d_vec_norm
-        ).sum(dim=-3)
+        if s1.dim() == 4:
+            v_m = s_n3.unsqueeze(dim=-2) * v3 + (
+                s2.unsqueeze(dim=-2) * v.unsqueeze(dim=-3)
+                + s3.unsqueeze(dim=-2) * d_vec_norm
+            ).sum(dim=-3)
+        else:  # higher order L = 3
+            v_m = s_n3.unsqueeze(dim=-2) * v3 + (
+                s2 * v.unsqueeze(dim=-3) + s3 * d_vec_norm
+            ).sum(dim=-3)
         return s_m, s_out, v_m
 
 
