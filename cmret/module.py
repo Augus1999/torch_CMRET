@@ -23,7 +23,7 @@ def softmax2d(x: Tensor) -> Tensor:
     return x.view(n_b, dim1, dim2)
 
 
-class RBF(nn.Module):
+class RBF1(nn.Module):
     def __init__(self, cell: float = 5.0, n_kernel: int = 20) -> None:
         """
         Bessel RBF kernel for 3D input.
@@ -85,8 +85,10 @@ class RBF3(nn.Module):
         :param n_kernel: number of kernels
         """
         super().__init__()
-        self.bessel = RBF(cell=cell, n_kernel=n_kernel)
+        self.bessel = RBF1(cell=cell, n_kernel=n_kernel)
         self.sphere = Sphere()
+        offsets = torch.linspace(1.0, 3.0, 3)
+        self.register_buffer("offsets", offsets[None, None, None, :])
 
     def forward(self, **karg) -> Tensor:
         """
@@ -98,11 +100,10 @@ class RBF3(nn.Module):
         d_e = self.bessel(d=d).unsqueeze(dim=-2)
         theta = self.sphere(d_vec)
         theta = theta.unsqueeze(dim=-1)
-        offsets = torch.linspace(1.0, 3.0, 3)[None, None, None, :]
         harmonic = (
-            ((2 * offsets + 1) / 4 * torch.pi).sqrt()
-            * (-theta.sin().pow(2)).pow(offsets)
-            * (-theta.sin() * theta.cos()).pow(offsets)
+            ((2 * self.offsets + 1) / (4 * torch.pi)).sqrt()
+            * (-theta.sin().pow(2)).pow(self.offsets)
+            * (-theta.sin() * theta.cos()).pow(self.offsets)
         )
         return d_e * harmonic.unsqueeze(dim=-1)
 
@@ -157,12 +158,10 @@ class Sphere(nn.Module):
 
     def forward(self, d_vec: Tensor) -> Tensor:
         """
-        :param d: distances;    shape: (n_b, n_a, n_a - 1)
         :param d_vec: vectors;  shape: (n_b, n_a, n_a - 1, 3)
         :return: theta values;  shape: (n_b, n_a, n_a - 1)
         """
         theta = torch.atan2(d_vec[..., 1], d_vec[..., 0])
-        theta += (theta < 0).type_as(theta) * (2 * torch.pi)
         # phi = torch.acos(d_vec[..., 2] / d)
         return theta
 
@@ -369,15 +368,19 @@ class Interaction(nn.Module):
         )
         s_m = s_n1 + s_n2 * (v1 * v2).sum(dim=-2)
         s_out = self.res(s_m)
+        if loop_mask is None:
+            v = v.unsqueeze(dim=-3)
+        else:
+            n_b, n_a, _, f = v.shape
+            v = v.unsqueeze(dim=-4)
+            v = v.repeat(1, n_a, 1, 1, 1)
+            v = v[loop_mask == 0].view(n_b, n_a, n_a - 1, 3, f)
         if s1.dim() == 4:
             v_m = s_n3.unsqueeze(dim=-2) * v3 + (
-                s2.unsqueeze(dim=-2) * v.unsqueeze(dim=-3)
-                + s3.unsqueeze(dim=-2) * d_vec_norm
+                s2.unsqueeze(dim=-2) * v + s3.unsqueeze(dim=-2) * d_vec_norm
             ).sum(dim=-3)
         else:  # higher order L = 3
-            v_m = s_n3.unsqueeze(dim=-2) * v3 + (
-                s2 * v.unsqueeze(dim=-3) + s3 * d_vec_norm
-            ).sum(dim=-3)
+            v_m = s_n3.unsqueeze(dim=-2) * v3 + (s2 * v + s3 * d_vec_norm).sum(dim=-3)
         return s_m, s_out, v_m
 
 

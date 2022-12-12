@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch import Tensor
 from .embedding import Embedding
 from .output import EquivarientDipoleMoment, EquivarientScalar
-from .module import Interaction, Distance, CosinCutOff, RBF, RBF2, RBF3
+from .module import Interaction, Distance, CosinCutOff, RBF1, RBF2, RBF3
 
 
 __all__ = ["CMRETModel"]
@@ -51,7 +51,7 @@ class CMRET(nn.Module):
         self.embedding = Embedding(embedding_dim=n_atom_basis)
         self.distance = Distance()
         if rbf_type == "bessel":
-            self.rbf = RBF(cell=cutoff, n_kernel=n_kernel)
+            self.rbf = RBF1(cell=cutoff, n_kernel=n_kernel)
         elif rbf_type == "gaussian":
             self.rbf = RBF2(cell=cutoff, n_kernel=n_kernel)
         elif rbf_type == "spherical":
