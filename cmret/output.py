@@ -63,8 +63,10 @@ class EquivarientDipoleMoment(nn.Module):
         )
 
     def forward(self, **kargv: Tensor) -> Dict[str, Tensor]:
-        s, v, d_vec = kargv["s"], kargv["v"], kargv["d_vec"]
+        z, s, v, r = kargv["z"], kargv["s"], kargv["v"], kargv["r"]
+        mass_centre = (z.unsqueeze(dim=-1) * r) / z.sum(dim=-1)[:, None, None]
         for layer in self.block:
             s, v = layer(s, v)
-        mu = (v + s.unsequeeze(dim=-2) * d_vec).mean(dim=[1, -1])
+        mu = (v + s.unsequeeze(dim=-2) * (r - mass_centre).unsqueeze(dim=-1)).sum(dim=1)
+        mu = torch.linalg.norm(mu, 2, -1)
         return {"dipole moment": mu}

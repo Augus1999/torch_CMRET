@@ -110,7 +110,7 @@ class CMRET(nn.Module):
             s, o, v = layer(s, v, e, d_vec_norm, mask, loop_mask)
             s_o += o
         s_o = self.norm(s_o)
-        return self.out(s=s_o, v=v, r=r, d_vec=d_vec)
+        return self.out(z=z, s=s_o, v=v, r=r)
 
 
 class CMRETModel(nn.Module):
