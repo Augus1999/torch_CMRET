@@ -94,7 +94,7 @@ class CMRET(nn.Module):
             loop_mask = None
         else:
             loop_mask = torch.eye(z.shape[-1], device=z.device)
-            loop_mask = loop_mask[None, :, :].repeat(z.shape[0], 1, 1)
+            loop_mask = loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
         d, d_vec = self.distance(r)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)

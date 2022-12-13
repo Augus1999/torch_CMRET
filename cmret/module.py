@@ -85,8 +85,8 @@ class RBF3(nn.Module):
         :param n_kernel: number of kernels
         """
         super().__init__()
-        self.bessel = RBF1(cell=cell, n_kernel=n_kernel)
-        self.sphere = Sphere()
+        self.radial = RBF2(cell=cell, n_kernel=n_kernel)
+        self.spherical = Sphere()
         offsets = torch.linspace(1.0, 3.0, 3)
         self.register_buffer("offsets", offsets[None, None, None, :])
 
@@ -97,8 +97,8 @@ class RBF3(nn.Module):
         :return: RBF-extanded distances;  shape: (n_b, n_a, n_a - 1, 3, n_k)
         """
         d, d_vec = karg["d"], karg["d_vec"]
-        d_e = self.bessel(d=d).unsqueeze(dim=-2)
-        theta = self.sphere(d_vec)
+        d_e = self.radial(d=d).unsqueeze(dim=-2)
+        theta = self.spherical(d_vec)
         theta = theta.unsqueeze(dim=-1)
         harmonic = (
             ((2 * self.offsets + 1) / (4 * torch.pi)).sqrt()
@@ -237,7 +237,7 @@ class CFConv(nn.Module):
             # CFConv: loop_mask helps to remove self-loop
             n_b, n_a, f = x.shape
             x_nbs = x.unsqueeze(dim=-3).repeat(1, n_a, 1, 1)
-            x_nbs = x_nbs[loop_mask == 0].view(n_b, n_a, n_a - 1, f)
+            x_nbs = x_nbs[loop_mask].view(n_b, n_a, n_a - 1, f)
             if w.dim() == 4:
                 v = x_nbs * w * mask
             else:  # higher order L = 3
@@ -374,7 +374,7 @@ class Interaction(nn.Module):
             n_b, n_a, _, f = v.shape
             v = v.unsqueeze(dim=-4)
             v = v.repeat(1, n_a, 1, 1, 1)
-            v = v[loop_mask == 0].view(n_b, n_a, n_a - 1, 3, f)
+            v = v[loop_mask].view(n_b, n_a, n_a - 1, 3, f)
         if s1.dim() == 4:
             v_m = s_n3.unsqueeze(dim=-2) * v3 + (
                 s2.unsqueeze(dim=-2) * v + s3.unsqueeze(dim=-2) * d_vec_norm
