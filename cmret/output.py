@@ -16,8 +16,7 @@ class EquivarientScalar(nn.Module):
         self, n_feature: int = 128, n_output: int = 2, dy: bool = True
     ) -> None:
         """
-        Equivarient Scalar output block.
-
+        Equivariant Scalar output block.
         :param n_feature: input feature
         :param n_output: number of output layers
         :param dy: whether calculater -dy
@@ -25,7 +24,7 @@ class EquivarientScalar(nn.Module):
         super().__init__()
         self.dy = dy
         self.block = nn.ModuleList(
-            [GatedEquivariant(n_feature=n_feature) for _ in range(n_output - 1)]
+            [GatedEquivariant(n_feature=n_feature) for _ in range(n_output)]
         )
         self.out = nn.Linear(in_features=n_feature, out_features=1, bias=True)
 
@@ -34,7 +33,7 @@ class EquivarientScalar(nn.Module):
         for layer in self.block:
             s, v = layer(s, v)
         s = self.out(s)
-        y = s.sum(dim=-2) + 0 * v.sum()
+        y = s.sum(dim=-2)
         dy = (
             grad(
                 outputs=y,
@@ -49,10 +48,10 @@ class EquivarientScalar(nn.Module):
         return {"energy": y, "force": -dy}
 
 
-class EquivarientDipoleMoment(nn.Module):
+class EquivariantDipoleMoment(nn.Module):
     def __init__(self, n_feature: int = 128, n_output: int = 2) -> None:
         """
-        Equivrient dipole moment output block.
+        Equivariant dipole moment output block.
 
         :param n_feature: input feature
         :param n_output: number of output layers

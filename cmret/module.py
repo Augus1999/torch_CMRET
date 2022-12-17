@@ -36,12 +36,12 @@ class RBF1(nn.Module):
         offsets = torch.linspace(1.0, n_kernel, n_kernel)
         self.register_buffer("offsets", offsets[None, None, None, :])
 
-    def forward(self, **karg) -> Tensor:
+    def forward(self, **kargv: Tensor) -> Tensor:
         """
         :param d: a tensor of distances;  shape: (n_b, n_a, n_a - 1)
         :return: RBF-extanded distances;  shape: (n_b, n_a, n_a - 1, n_k)
         """
-        d = karg["d"]
+        d = kargv["d"]
         out = (
             torch.pi * self.offsets * d.unsqueeze(dim=-1) / self.cell
         ).sin() / d.unsqueeze(dim=-1)
@@ -66,12 +66,12 @@ class RBF2(nn.Module):
         self.offsets = nn.Parameter(offsets, requires_grad=True)
         self.coeff = nn.Parameter(coeff / 4, requires_grad=True)
 
-    def forward(self, **karg) -> Tensor:
+    def forward(self, **kargv: Tensor) -> Tensor:
         """
         :param d: a tensor of distances;  shape: (n_b, n_a, n_a - 1)
         :return: RBF-extanded distances;  shape: (n_b, n_a, n_a - 1, n_k)
         """
-        d = karg["d"]
+        d = kargv["d"]
         out = (-self.coeff * ((-d.unsqueeze(dim=-1)).exp() - self.offsets).pow(2)).exp()
         return out
 
@@ -90,13 +90,13 @@ class RBF3(nn.Module):
         offsets = torch.linspace(1.0, 3.0, 3)
         self.register_buffer("offsets", offsets[None, None, None, :])
 
-    def forward(self, **karg) -> Tensor:
+    def forward(self, **kargv: Tensor) -> Tensor:
         """
         :param d: a tensor of distances;  shape: (n_b, n_a, n_a - 1)
         :param d_vec: pair-wise vector;   shape: (n_b, n_a, n_a - 1, 3)
         :return: RBF-extanded distances;  shape: (n_b, n_a, n_a - 1, 3, n_k)
         """
-        d, d_vec = karg["d"], karg["d_vec"]
+        d, d_vec = kargv["d"], kargv["d_vec"]
         d_e = self.radial(d=d).unsqueeze(dim=-2)
         theta = self.spherical(d_vec)
         theta = theta.unsqueeze(dim=-1)

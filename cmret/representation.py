@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from .embedding import Embedding
-from .output import EquivarientDipoleMoment, EquivarientScalar
+from .output import EquivariantDipoleMoment, EquivarientScalar
 from .module import Interaction, Distance, CosinCutOff, RBF1, RBF2, RBF3
 
 
@@ -120,7 +120,7 @@ class CMRETModel(nn.Module):
         n_kernel: int = 20,
         n_atom_basis: int = 128,
         n_interaction: int = 5,
-        n_output: int = 3,
+        n_output: int = 2,
         rbf_type: str = "gaussian",
         num_head: int = 1,
         attention_activation: str = "softmax",
@@ -151,7 +151,7 @@ class CMRETModel(nn.Module):
         elif output_mode in ("energy", "HOMO", "LUMO"):
             out = EquivarientScalar(n_feature=n_atom_basis, n_output=n_output, dy=False)
         elif output_mode == "dipole moment":
-            out = EquivarientDipoleMoment(n_feature=n_atom_basis, n_output=n_output)
+            out = EquivariantDipoleMoment(n_feature=n_atom_basis, n_output=n_output)
         self.model = CMRET(
             output=out,
             cutoff=cutoff,
