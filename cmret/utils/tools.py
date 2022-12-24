@@ -189,7 +189,7 @@ def test(
     :param load: load from an existence state file <file>
     :param loss_calculator: loss calculator
     :param metric_type: chosen from 'MAE' and 'RMSE'
-    :return: MAE of target
+    :return: test metrics
     """
     loader = DataLoader(dataset=dataset, batch_size=50)
     size = len(loader)
@@ -216,10 +216,9 @@ def test(
             else:
                 results[key] += result[key].item()
     for key in results:
-        if metric_type == "MAE":
-            results[key] = results[key] / size
+        results[key] = results[key] / size
         if metric_type == "RMSE":
-            results[key] = results[key] ** 0.5 / size
+            results[key] = results[key] ** 0.5
     return results
 
 

@@ -178,6 +178,12 @@ class CMRETModel(nn.Module):
         return self.model(mol)
 
     def pretrained(self, file: Optional[str]) -> nn.Module:
+        """
+        Load pre-trained weight.
+
+        :param file: model file name <file>
+        :return: model
+        """
         if file:
             with open(file, mode="rb") as f:
                 state_dict = torch.load(f, map_location="cpu")
