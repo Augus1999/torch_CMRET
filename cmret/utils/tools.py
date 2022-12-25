@@ -17,6 +17,39 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 
 
+class _TwoCycleLR:
+    def __init__(self, optimizer, total_steps: int, step_size_up: int = 100000) -> None:
+        self.total_steps = total_steps
+        self.step_size_up = step_size_up
+        self.scheduler = op.lr_scheduler.CyclicLR(
+            optimizer=optimizer,
+            base_lr=1e-6,
+            max_lr=1e-4,
+            step_size_up=step_size_up,
+            step_size_down=total_steps // 2 - step_size_up,
+            cycle_momentum=False,
+        )
+        self._remove_weakref()
+
+    def step(self, step_idx: int) -> None:
+        self.scheduler.step()
+        if step_idx == self.total_steps // 2 - 1:
+            self.scheduler = op.lr_scheduler.CyclicLR(
+                optimizer=self.scheduler.optimizer,
+                base_lr=1e-8,
+                max_lr=1e-6,
+                step_size_up=self.step_size_up,
+                step_size_down=self.total_steps // 2 - self.step_size_up - 2,
+                cycle_momentum=False,
+            )
+            self.scheduler.last_epoch = -1
+            self._remove_weakref()
+    
+    def _remove_weakref(self) -> None:
+        self.scheduler._scale_fn_custom = self.scheduler._scale_fn_ref()
+        self.scheduler._scale_fn_ref = None
+
+
 def energy_force_loss(
     out: Dict[str, Tensor],
     label: Dict[str, Tensor],
@@ -69,8 +102,7 @@ def energy_loss(
 def train(
     model: nn.Module,
     train_set: DataLoader,
-    max_n_epochs: int = 10000,
-    lrs: List[float] = [1e-4, 1e-6],
+    max_n_epochs: int = 20000,
     loss_calculator=energy_force_loss,
     unit: str = "eV",
     load: Optional[str] = None,
@@ -84,7 +116,6 @@ def train(
     :param model: model for training
     :param train_set: training set
     :param max_n_epochs: max training epochs size
-    :param lrs: max and min learning rate
     :param loss_calculator: loss calculator
     :param unit: dataset energy unit
     :param load: load from an existence state file <file>
@@ -105,18 +136,10 @@ def train(
     )
     start_epoch: int = 0
     train_size = len(train_set)
-    lr_max, lr_min = max(lrs), min(lrs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device=device).train()
-    optimizer = op.Adam(model.parameters(), lr=lr_min, amsgrad=False)
-    scheduler = op.lr_scheduler.CyclicLR(
-        optimizer=optimizer,
-        base_lr=lr_min,
-        max_lr=lr_max,
-        step_size_up=100000,
-        step_size_down=max_n_epochs * train_size - 100000,
-        cycle_momentum=False,
-    )
+    optimizer = op.Adam(model.parameters(), lr=1e-8, amsgrad=False)
+    scheduler = _TwoCycleLR(optimizer=optimizer, total_steps=max_n_epochs * train_size)
     logging.info(f"using hardware {device}")
     logging.debug(f"{model.check_parameter_number} trainable parameters")
     if load:
@@ -125,7 +148,7 @@ def train(
         keys = {"nn", "opt", "epoch", "scheduler"}
         if keys & set(state_dic.keys()) == keys:
             model.load_state_dict(state_dict=state_dic["nn"])
-            scheduler.load_state_dict(state_dict=state_dic["scheduler"])
+            scheduler.scheduler.load_state_dict(state_dict=state_dic["scheduler"])
             start_epoch: int = state_dic["epoch"]
             optimizer.load_state_dict(state_dict=state_dic["opt"])
         else:
@@ -135,7 +158,7 @@ def train(
     logging.info("start training")
     for epoch in range(start_epoch, max_n_epochs):
         running_loss = 0.0
-        for d in train_set:
+        for key, d in enumerate(train_set):
             mol, label = d["mol"], d["label"]
             for i in mol:
                 mol[i] = mol[i].to(device)
@@ -147,14 +170,15 @@ def train(
             loss.backward()
             optimizer.step()
             model.zero_grad(set_to_none=True)
-            scheduler.step()  # update scheduler after optimised
+            # update scheduler after optimised
+            scheduler.step(step_idx=key + epoch * train_size)
         logging.info(f"epoch: {epoch + 1} loss: {running_loss / train_size}")
         if save_every:
             if (epoch + 1) % save_every == 0:
                 state = {
                     "nn": model.state_dict(),
                     "opt": optimizer.state_dict(),
-                    "scheduler": scheduler.state_dict(),
+                    "scheduler": scheduler.scheduler.state_dict(),
                     "epoch": epoch + 1,
                     "unit": unit,
                 }
