@@ -92,8 +92,7 @@ class Molecule:
         """
         :param delta_t: time step, unit in second
         :param steps: MD loop steps
-        :param temperature: temperature, unit in K;
-                            if mode is "relaxation" this argument will be ignored
+        :param temperature: temperature, unit in K
         :return: None
         """
         assert self.calculator != None, "You must specify a force-field calculator."
