@@ -44,7 +44,7 @@ class _TwoCycleLR:
             )
             self.scheduler.last_epoch = -1
             self._remove_weakref()
-    
+
     def _remove_weakref(self) -> None:
         self.scheduler._scale_fn_custom = self.scheduler._scale_fn_ref()
         self.scheduler._scale_fn_ref = None
@@ -182,14 +182,9 @@ def train(
                     "epoch": epoch + 1,
                     "unit": unit,
                 }
-                torch.save(
-                    state,
-                    Path(work_dir)
-                    / f"state-{str(epoch + 1).zfill(len(str(max_n_epochs)))}.pkl",
-                )
-                logging.info(
-                    f"saved checkpoint state-{str(epoch + 1).zfill(len(str(max_n_epochs)))}.pkl"
-                )
+                chkpt_idx = str(epoch + 1).zfill(len(str(max_n_epochs)))
+                torch.save(state, Path(work_dir) / f"state-{chkpt_idx}.pkl")
+                logging.info(f"saved checkpoint state-{chkpt_idx}.pkl")
     torch.save(
         {"nn": model.state_dict(), "unit": unit},
         Path(work_dir) / r"trained.pt",
@@ -283,12 +278,15 @@ def extract_log_info(log_name: str = "training.log") -> Dict[str, List]:
     return info
 
 
-def split_data(file_name: Union[str, Path], fraction: float = 0.8) -> bool:
+def split_data(
+    file_name: Union[str, Path], fraction: float = 0.8, shuffle: bool = True
+) -> bool:
     """
     Split a dataset to file_name-train.xyz and file_name-test.xyz files.
 
     :param file_name: file to be splited <file>
     :param fraction: fraction = n_train / n_total, value: (0, 1)
+    :param shuffle: whether to shuffle the dataset
     :return: True if n_test != 0 else False
     """
     assert str(file_name).endswith(".xyz"), "Unsupported format..."
@@ -306,8 +304,15 @@ def split_data(file_name: Union[str, Path], fraction: float = 0.8) -> bool:
     l_i_len = len(line_indexes)
     for key, idx in enumerate(line_indexes):
         mol_info = lines[idx : line_indexes[key + 1] if (key + 1) < l_i_len else None]
+        try:
+            # convert to the format supported by ASE
+            energy = float(mol_info[1])
+            mol_info[1] = f"Properties=species:S:1:pos:R:3:forces:R:3 energy={energy}\n"
+        except ValueError:
+            pass
         lines_group.append(mol_info)
-    random.shuffle(lines_group)
+    if shuffle:
+        random.shuffle(lines_group)
     for i in lines_group:
         for j in i:
             lines_.append(j)

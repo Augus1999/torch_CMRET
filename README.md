@@ -30,8 +30,7 @@ train(model=model, train_set=trainset, unit=dataset.unit, work_dir=workdir)
 from cmret.utils import test, DataSet
 
 dataset = DataSet("QM.CH2", "dataset", mode="test", limit=None).data
-info = test(model=model, dataset=dataset, load=f"{workdir}/trained.pt")
-print(info)
+print(test(model=model, dataset=dataset, load=f"{workdir}/trained.pt"))
 ```
 
 ### running Molecular Dynamics
@@ -49,7 +48,7 @@ molecules = carbene.molecule
 
 ## Cite
 ```bibtex
-@article{tao2022physicet,
+@article{tao2022cmret,
 	title={Comprehensive Molecular Representation from Equivariant Transformer},
 	author={Tao, Nianze and Morimoto, Hiromi and Leoni, Stefano},
 	journal={arXiv preprint arXiv:},

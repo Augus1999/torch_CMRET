@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Author: Nianze A. Tao (Omzawa Sueno)
+# Author: Nianze A. Tao (Omozawa Sueno)
 """
 Utils
 """
