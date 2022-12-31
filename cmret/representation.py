@@ -98,11 +98,11 @@ class CMRET(nn.Module):
         d, d_vec = self.distance(r)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
-        e_ = self.rbf(d=d, d_vec=d_vec)
-        if e_.dim() == 4:
-            e = cutoff * e_
+        e = self.rbf(d=d, d_vec=d_vec)
+        if e.dim() == 4:
+            e = cutoff * e
         else:
-            e = cutoff.unsqueeze(dim=-2) * e_
+            e = cutoff.unsqueeze(dim=-2) * e
         d_vec_norm = (mask * d_vec / d.unsqueeze(dim=-1)).unsqueeze(dim=-1)
         s = self.embedding(z)
         s_o = 0

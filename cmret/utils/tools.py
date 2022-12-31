@@ -6,7 +6,6 @@ Useful tools (hopefully :)
 import os
 import re
 import glob
-import random
 import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Union, Generator
@@ -279,22 +278,21 @@ def extract_log_info(log_name: str = "training.log") -> Dict[str, List]:
 
 
 def split_data(
-    file_name: Union[str, Path], fraction: float = 0.8, shuffle: bool = True
-) -> bool:
+    file_name: Union[str, Path], train_split_idx: List, test_split_idx: List
+) -> None:
     """
     Split a dataset to file_name-train.xyz and file_name-test.xyz files.
 
     :param file_name: file to be splited <file>
-    :param fraction: fraction = n_train / n_total, value: (0, 1)
-    :param shuffle: whether to shuffle the dataset
-    :return: True if n_test != 0 else False
+    :param train_split_idx: indeces of training data
+    :param test_split_idx: indeces of testing data
+    :return: None
     """
     assert str(file_name).endswith(".xyz"), "Unsupported format..."
-    assert 0 < fraction < 1, "invalid value of parmater 'fraction'..."
     with open(file_name, mode="r", encoding="utf-8") as f:
         lines = f.readlines()
     line_indexes = []
-    lines_group, lines_ = [], []
+    lines_group, lines_train, lines_test = [], [], []
     for idx, line in enumerate(lines):
         try:
             int(line)
@@ -311,23 +309,21 @@ def split_data(
         except ValueError:
             pass
         lines_group.append(mol_info)
-    if shuffle:
-        random.shuffle(lines_group)
-    for i in lines_group:
-        for j in i:
-            lines_.append(j)
-    train_set_idx = int(l_i_len * fraction)
-    if train_set_idx == l_i_len:
-        return False
+    for key, i in enumerate(lines_group):
+        if key in train_split_idx:
+            for j in i:
+                lines_train.append(j)
+        if key in test_split_idx:
+            for j in i:
+                lines_test.append(j)
     with open(
         str(file_name).replace(".xyz", "-train.xyz"), mode="w", encoding="utf-8"
     ) as sf:
-        sf.writelines(lines_[: line_indexes[train_set_idx]])
+        sf.writelines(lines_train)
     with open(
         str(file_name).replace(".xyz", "-test.xyz"), mode="w", encoding="utf-8"
     ) as sf:
-        sf.writelines(lines_[line_indexes[train_set_idx] :])
-    return True
+        sf.writelines(lines_test)
 
 
 if __name__ == "__main__":

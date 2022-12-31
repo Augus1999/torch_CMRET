@@ -24,20 +24,11 @@ import torch
 from torch import Tensor
 from torch.utils import data
 
-
-valid_dataset_name = (
-    "QM.CH2",
-    "rMD17.benzene",
-    "rMD17.ethanol",
-    "rMD17.uracil",
-    "rMD17.naphthalene",
-    "rMD17.aspirin",
-    "rMD17.salicylic",
-    "rMD17.malonaldehyde",
-    "rMD17.toluene",
-    "rMD17.paracetamol",
-    "rMD17.azobenzene",
-)
+set_names, valid_dataset_name = ["MD17", "rMD17"], ["QM.CH2"]
+mols = "benzene ethanol uracil naphthalene aspirin salicylic malonaldehyde toluene paracetamol azobenzene"
+for mol_name in mols.split():
+    for set_name in set_names:
+        valid_dataset_name.append(f"{set_name}.{mol_name}")
 
 
 class ASEData(data.Dataset):
@@ -86,7 +77,7 @@ class XYZData(data.Dataset):
         limit: Optional[int] = None,
     ) -> None:
         """
-        Dataset stored extend xyz file.
+        Dataset stored in extend xyz file.
 
         :param file: dataset file name <file>
         :param limit: item limit
@@ -115,7 +106,7 @@ class XYZData(data.Dataset):
 class DataSet:
     """
     Import, download dataset\n
-    Recently support downloading rMD17 and QM datasets.
+    Recently support downloading MD17, rMD17 and QM datasets.
     """
 
     def __init__(
@@ -128,7 +119,7 @@ class DataSet:
         """
         Check the state of dataset, download if not exist.
 
-        :param name: dataset name, choose from "rMD17.xxx", "QM.CH2"
+        :param name: dataset name, choose from "MD17.xxx", "rMD17.xxx", "QM.CH2"
         :param dir: where the dataset locates, or where to store it after downloading <path>
         :param mode: mode; "train" or "test"
         :param limit: item limit
@@ -150,7 +141,7 @@ class DataSet:
         """
         Return the required dataset class.
         """
-        dataset = {"QM": ASEData, "rMD17": ASEData}
+        dataset = {"QM": ASEData, "rMD17": ASEData, "MD17": XYZData}
         return dataset[self.name]
 
     @property
@@ -158,7 +149,7 @@ class DataSet:
         """
         Return the dataset energy unit.
         """
-        units = {"QM": "eV", "rMD17": "eV"}
+        units = {"QM": "eV", "rMD17": "eV", "MD17": "kcal/mol"}
         return units[self.name]
 
     @property
@@ -174,6 +165,15 @@ class DataSet:
             valid_files = {
                 self.base_name + "_train.db",
                 self.base_name + "_test.db",
+            }
+            if valid_files & d_files == valid_files:
+                return True
+        if self.name == "MD17":
+            d_files = list(glob.glob(str(self.dir / r"*.xyz")))
+            d_files = set([os.path.basename(i) for i in d_files])
+            valid_files = {
+                self.base_name + "-train.xyz",
+                self.base_name + "-test.xyz",
             }
             if valid_files & d_files == valid_files:
                 return True
@@ -194,44 +194,47 @@ class DataSet:
         """
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
+        rurl = "https://github.com/Augus1999/torch_CMRET/blob/main/dataset/"
         if self.name == "rMD17":
             urls = {
-                f"{self.base_name}_train.db": f"https://github.com/Augus1999/torch_CMRET/blob/main/dataset/rmd17/{self.base_name}_train.db?raw=true",
-                f"{self.base_name}_test.db": f"https://github.com/Augus1999/torch_CMRET/blob/main/dataset/rmd17/{self.base_name}_test.db?raw=true",
+                f"{self.base_name}_train.db": rurl
+                + f"rmd17/{self.base_name}_train.db?raw=true",
+                f"{self.base_name}_test.db": rurl
+                + f"rmd17/{self.base_name}_test.db?raw=true",
             }
-            for name in list(urls.keys()):
-                print(f"downloading {name}...")
-                temp = requests.get(urls[name], stream=True)
-                total_length = int(temp.headers.get("content-length"))
-                file_name = self.dir / name
-                with open(file_name, mode="wb") as f:
-                    for chunk in progress.bar(
-                        temp.iter_content(chunk_size=1024),
-                        expected_size=(total_length / 1024) + 1,
-                        width=50,
-                    ):
-                        if chunk:
-                            f.write(chunk)
-                print("finished downloading")
+            self._download_from_url(urls=urls)
+        if self.name == "MD17":
+            urls = {
+                f"{self.base_name}-train.xyz": rurl
+                + f"md17/{self.base_name}-train.xyz?raw=true",
+                f"{self.base_name}-test.xyz": rurl
+                + f"md17/{self.base_name}-test.xyz?raw=true",
+            }
+            self._download_from_url(urls=urls)
         if self.name == "QM":
             urls = {
-                f"{self.base_name.lower()}_2000_train.db": "https://github.com/Augus1999/torch_CMRET/blob/main/dataset/ch2_2000_train.db?raw=true",
-                f"{self.base_name.lower()}_2000_test.db": "https://github.com/Augus1999/torch_CMRET/blob/main/dataset/ch2_2000_test.db?raw=true",
+                f"{self.base_name.lower()}_2000_train.db": rurl
+                + "ch2_2000_train.db?raw=true",
+                f"{self.base_name.lower()}_2000_test.db": rurl
+                + "ch2_2000_test.db?raw=true",
             }
-            for name in list(urls.keys()):
-                print(f"downloading {name}...")
-                temp = requests.get(urls[name], stream=True)
-                total_length = int(temp.headers.get("content-length"))
-                file_name = self.dir / name
-                with open(file_name, mode="wb") as f:
-                    for chunk in progress.bar(
-                        temp.iter_content(chunk_size=1024),
-                        expected_size=(total_length / 1024) + 1,
-                        width=50,
-                    ):
-                        if chunk:
-                            f.write(chunk)
-                print("finished downloading")
+            self._download_from_url(urls=urls)
+
+    def _download_from_url(self, urls: Dict[str, str]) -> None:
+        for name in list(urls.keys()):
+            print(f"downloading {name}...")
+            temp = requests.get(urls[name], stream=True)
+            total_length = int(temp.headers.get("content-length"))
+            file_name = self.dir / name
+            with open(file_name, mode="wb") as f:
+                for chunk in progress.bar(
+                    temp.iter_content(chunk_size=1024),
+                    expected_size=(total_length / 1024) + 1,
+                    width=50,
+                ):
+                    if chunk:
+                        f.write(chunk)
+            print("finished downloading")
 
     @property
     def data(self) -> Generator:
@@ -242,6 +245,12 @@ class DataSet:
             file_names = {
                 "train": self.base_name + "_train.db",
                 "test": self.base_name + "_test.db",
+            }
+            file_name = file_names[self.mode]
+        if self.name == "MD17":
+            file_names = {
+                "train": self.base_name + "-train.xyz",
+                "test": self.base_name + "-test.xyz",
             }
             file_name = file_names[self.mode]
         if self.name == "QM":
