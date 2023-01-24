@@ -90,12 +90,14 @@ class CMRET(nn.Module):
             v -= (mol["Q"] / z.sum(dim=-1, keepdim=True))[:, :, None, None]
         if "S" in mol:
             v += (mol["S"] / z.sum(dim=-1, keepdim=True))[:, :, None, None]
+        _loop_mask = torch.eye(z.shape[-1], device=z.device)
+        _loop_mask = _loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
         if self.sim_cfconv:
             loop_mask = None
         else:
-            loop_mask = torch.eye(z.shape[-1], device=z.device)
-            loop_mask = loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
-        d, d_vec = self.distance(r)
+            loop_mask = _loop_mask
+        s = self.embedding(z)
+        d, d_vec = self.distance(r, _loop_mask)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
         e = self.rbf(d=d, d_vec=d_vec)
@@ -104,7 +106,6 @@ class CMRET(nn.Module):
         else:
             e = cutoff.unsqueeze(dim=-2) * e
         d_vec_norm = (mask * d_vec / d.unsqueeze(dim=-1)).unsqueeze(dim=-1)
-        s = self.embedding(z)
         s_o = 0
         for layer in self.interaction:
             s, o, v = layer(s, v, e, d_vec_norm, mask, loop_mask)

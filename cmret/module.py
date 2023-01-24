@@ -136,15 +136,16 @@ class Distance(nn.Module):
         """
         super().__init__()
 
-    def forward(self, r: Tensor) -> Tuple[Tensor]:
+    def forward(self, r: Tensor, loop_mask: Tensor) -> Tuple[Tensor]:
         """
         :param r: nuclear coordinates;  shape: (n_b, n_a, 3)
+        :param loop_mask: loop mask;    shape: (n_b, n_a, n_a)
         :return: d, d_vec;              shape: (n_b, n_a, n_a - 1), (n_b, n_a, n_a - 1, 3)
         """
         n_b, n_a, _ = r.shape
         d_vec = r.unsqueeze(dim=-2) - r.unsqueeze(dim=-3)
         # remove 0 vectors
-        d_vec = d_vec[torch.linalg.norm(d_vec, 2, -1) != 0].view(n_b, n_a, n_a - 1, 3)
+        d_vec = d_vec[loop_mask].view(n_b, n_a, n_a - 1, 3)
         d = torch.linalg.norm(d_vec, 2, -1)
         return d, d_vec
 
