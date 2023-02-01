@@ -136,18 +136,26 @@ class Distance(nn.Module):
         """
         super().__init__()
 
-    def forward(self, r: Tensor, loop_mask: Tensor) -> Tuple[Tensor]:
+    def forward(
+        self, r: Tensor, loop_mask: Tensor, return_d0: bool = False
+    ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         """
         :param r: nuclear coordinates;  shape: (n_b, n_a, 3)
         :param loop_mask: loop mask;    shape: (n_b, n_a, n_a)
+        :param return_d0: whether to return the original distance matrix
         :return: d, d_vec;              shape: (n_b, n_a, n_a - 1), (n_b, n_a, n_a - 1, 3)
+                 d0;                    shape: (n_b, n_a, n_a)
         """
         n_b, n_a, _ = r.shape
         d_vec = r.unsqueeze(dim=-2) - r.unsqueeze(dim=-3)
+        if return_d0:
+            d0 = torch.linalg.norm(d_vec, 2, -1)
         # remove 0 vectors
         d_vec = d_vec[loop_mask].view(n_b, n_a, n_a - 1, 3)
         d = torch.linalg.norm(d_vec, 2, -1)
-        return d, d_vec
+        if return_d0:
+            return d, d_vec, d0
+        return d, d_vec, None
 
 
 class Sphere(nn.Module):
@@ -163,7 +171,6 @@ class Sphere(nn.Module):
         :return: theta values;  shape: (n_b, n_a, n_a - 1)
         """
         theta = torch.atan2(d_vec[..., 1], d_vec[..., 0])
-        # phi = torch.acos(d_vec[..., 2] / d)
         return theta
 
 
@@ -289,10 +296,14 @@ class NonLoacalInteraction(nn.Module):
         else:
             self.activate = activate_funs[activation.lower()]
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(
+        self, x: Tensor, return_attn_matrix: bool = False
+    ) -> Tuple[Tensor, Optional[Tensor]]:
         """
         :param x: input tensor;            shape: (n_b, n_a, n_f)
+        :param return_attn_matrix: whether to return the attenton matrix
         :return: attention-scored output;  shape: (n_b, n_a, n_f)
+                 attention matrix;         shape: (n_b, n_a, n_a)
         """
         query = self.q(x)
         key = self.k(x)
@@ -302,7 +313,9 @@ class NonLoacalInteraction(nn.Module):
         else:
             alpha = self.activate(query @ key.transpose(-2, -1) / self.temp)
             out = alpha @ value
-        return out
+        if return_attn_matrix:
+            return out, alpha
+        return out, None
 
 
 class Interaction(nn.Module):
@@ -345,7 +358,8 @@ class Interaction(nn.Module):
         d_vec_norm: Tensor,
         mask: Tensor,
         loop_mask: Optional[Tensor],
-    ) -> Tuple[Tensor]:
+        return_attn_matrix: bool = False,
+    ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
         """
         :param s: scale info;                 shape: (n_b, n_a, n_f)
         :param v: vector info;                shape: (n_b, n_a, 3, n_f)
@@ -353,7 +367,8 @@ class Interaction(nn.Module):
         :param d_vec_norm: normalised d_vec;  shape: (n_b, n_a, n_a - 1, 3, 1)
         :param mask: neighbour mask;          shape: (n_b, n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;     shape: (n_b, n_a, n_a)
-        :return: new scale & output scale & vector info
+        :param return_attn_matrix: whether to return the attenton matrix
+        :return: new scale & output scale & vector info & attention matrix
         """
         s1, s2, s3 = self.cfconv(s, e, mask, loop_mask)
         v1, v2, v3 = torch.split(
@@ -362,8 +377,9 @@ class Interaction(nn.Module):
             dim=-1,
         )
         s1_sum = s1.sum(dim=-2) if s1.dim() == 4 else s1.sum(dim=[-3, -2])
+        s_nonlocal, attn_matrix = self.nonloacl(s, return_attn_matrix)
         s_n1, s_n2, s_n3 = torch.split(
-            self.o(s + self.nonloacl(s) + s1_sum),
+            self.o(s + s_nonlocal + s1_sum),
             split_size_or_sections=self.n_feature,
             dim=-1,
         )
@@ -382,7 +398,7 @@ class Interaction(nn.Module):
             ).sum(dim=-3)
         else:  # higher order L = 3
             v_m = s_n3.unsqueeze(dim=-2) * v3 + (s2 * v + s3 * d_vec_norm).sum(dim=-3)
-        return s_m, s_out, v_m
+        return s_m, s_out, v_m, attn_matrix
 
 
 class GatedEquivariant(nn.Module):

@@ -73,7 +73,13 @@ class CMRET(nn.Module):
         self.norm = nn.LayerNorm(normalized_shape=n_atom_basis)
         self.out = output
 
-    def forward(self, mol: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(
+        self,
+        mol: Dict[str, Tensor],
+        return_adjacency_matrix: bool = False,
+        return_attn_matrix: bool = False,
+        average_attn_matrix_over_layers: bool = True,
+    ) -> Dict[str, Tensor]:
         """
         :param mol: molecule = {
             "Z": nuclear charges tensor;      shape: (n_b, n_a)
@@ -81,6 +87,9 @@ class CMRET(nn.Module):
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }
+        :param return_adjacency_matrix: whether to return the adjacency matrix
+        :param return_attn_matrix: whether to return the attention matrices
+        :param average_attn_matrix_over_layers: whether to average the attention matrices over layers
         :return: molecular properties (e.g. energy, atomic forces, dipole moment)
         """
         z, r = mol["Z"], mol["R"]
@@ -97,21 +106,37 @@ class CMRET(nn.Module):
         else:
             loop_mask = _loop_mask
         s = self.embedding(z)
-        d, d_vec = self.distance(r, _loop_mask)
+        d, d_vec, d0 = self.distance(r, _loop_mask, return_adjacency_matrix)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
+        if return_adjacency_matrix:
+            adj, _ = self.cutoff(d0)
         e = self.rbf(d=d, d_vec=d_vec)
         if e.dim() == 4:
             e = cutoff * e
         else:
             e = cutoff.unsqueeze(dim=-2) * e
         d_vec_norm = (mask * d_vec / d.unsqueeze(dim=-1)).unsqueeze(dim=-1)
-        s_o = 0
+        s_o, attn = 0, []
         for layer in self.interaction:
-            s, o, v = layer(s, v, e, d_vec_norm, mask, loop_mask)
+            s, o, v, _attn = layer(
+                s, v, e, d_vec_norm, mask, loop_mask, return_attn_matrix
+            )
             s_o += o
+            if return_attn_matrix:
+                if average_attn_matrix_over_layers:
+                    attn.append(_attn.unsqueeze(dim=0))
+                else:
+                    attn.append(_attn)
         s_o = self.norm(s_o)
-        return self.out(z=z, s=s_o, v=v, r=r)
+        out = self.out(z=z, s=s_o, v=v, r=r)
+        if return_adjacency_matrix:
+            out["adj_matrix"] = adj
+        if return_attn_matrix:
+            if average_attn_matrix_over_layers:
+                attn = torch.cat(attn, dim=0).mean(dim=0)
+            out["attn_matrix"] = attn
+        return out
 
 
 class CMRETModel(nn.Module):
@@ -166,7 +191,13 @@ class CMRETModel(nn.Module):
             dy=dy,
         )
 
-    def forward(self, mol: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(
+        self,
+        mol: Dict[str, Tensor],
+        return_adjacency_matrix: bool = False,
+        return_attn_matrix: bool = False,
+        average_attn_matrix_over_layers: bool = True,
+    ) -> Dict[str, Tensor]:
         """
         :param mol: molecule = {
             "Z": nuclear charges tensor;      shape: (n_b, n_a)
@@ -174,9 +205,17 @@ class CMRETModel(nn.Module):
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }
+        :param return_adjacency_matrix: whether to return the adjacency matrix
+        :param return_attn_matrix: whether to return the attention matrices
+        :param average_attn_matrix_over_layers: whether to average the attention matrices over layers
         :return: molecular properties (e.g. energy, atomic forces, dipole moment)
         """
-        return self.model(mol)
+        return self.model(
+            mol,
+            return_adjacency_matrix,
+            return_attn_matrix,
+            average_attn_matrix_over_layers,
+        )
 
     def pretrained(self, file: Optional[str]) -> nn.Module:
         """
