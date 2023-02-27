@@ -26,7 +26,6 @@ class CMRET(nn.Module):
         rbf_type: str = "gaussian",
         num_head: int = 1,
         attention_activation: str = "softmax",
-        simplified_cfconv: bool = True,
         dy: bool = True,
     ) -> None:
         """
@@ -41,13 +40,11 @@ class CMRET(nn.Module):
                          choosing 'spherical' to allow higher order MP (L = 3)
         :param num_head: number of attention head per layer
         :param attention_activation: attention activation function type
-        :param simplified_cfconv: whether using simplified CFConv scheme
         :param dy: whether calculater -dy
         """
         super().__init__()
         self.dy = dy
         self.n = n_atom_basis
-        self.sim_cfconv = simplified_cfconv
         self.embedding = Embedding(embedding_dim=n_atom_basis)
         self.distance = Distance()
         if rbf_type == "bessel":
@@ -99,14 +96,10 @@ class CMRET(nn.Module):
             v -= (mol["Q"] / z.sum(dim=-1, keepdim=True))[:, :, None, None]
         if "S" in mol:
             v += (mol["S"] / z.sum(dim=-1, keepdim=True))[:, :, None, None]
-        _loop_mask = torch.eye(z.shape[-1], device=z.device)
-        _loop_mask = _loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
-        if self.sim_cfconv:
-            loop_mask = None
-        else:
-            loop_mask = _loop_mask
+        loop_mask = torch.eye(z.shape[-1], device=z.device)
+        loop_mask = loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
         s = self.embedding(z)
-        d, d_vec, d0 = self.distance(r, _loop_mask, return_adjacency_matrix)
+        d, d_vec, d0 = self.distance(r, loop_mask, return_adjacency_matrix)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
         if return_adjacency_matrix:
@@ -150,7 +143,6 @@ class CMRETModel(nn.Module):
         rbf_type: str = "gaussian",
         num_head: int = 1,
         attention_activation: str = "softmax",
-        simplified_cfconv: bool = True,
         output_mode: str = "energy-force",
     ) -> None:
         """
@@ -165,7 +157,6 @@ class CMRETModel(nn.Module):
                          choosing 'spherical' to allow higher order MP (L = 3)
         :param num_head: number of attention head per layer
         :param attention_activation: attention activation function type
-        :param simplified_cfconv: whether using simplified CFConv scheme
         :param output_mode: output properties
         """
         super().__init__()
@@ -178,6 +169,13 @@ class CMRETModel(nn.Module):
             out = EquivarientScalar(n_feature=n_atom_basis, n_output=n_output, dy=False)
         elif output_mode == "dipole moment":
             out = EquivariantDipoleMoment(n_feature=n_atom_basis, n_output=n_output)
+        elif output_mode == "pretrain":
+            out = EquivarientScalar(
+                n_feature=n_atom_basis,
+                n_output=n_output,
+                dy=dy,
+                return_vector_feature=True,
+            )
         self.model = CMRET(
             output=out,
             cutoff=cutoff,
@@ -187,7 +185,6 @@ class CMRETModel(nn.Module):
             rbf_type=rbf_type,
             num_head=num_head,
             attention_activation=attention_activation,
-            simplified_cfconv=simplified_cfconv,
             dy=dy,
         )
 

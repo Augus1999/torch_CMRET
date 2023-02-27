@@ -13,8 +13,8 @@ def softmax2d(x: Tensor) -> Tensor:
     """
     Applies Softmax over last two dimensions.
 
-    :param x: input tensor;   shape: (n_b, H, W)
-    :return: output tensor;   shape: (n_b, H, W)
+    :param x: input tensor;  shape: (n_b, H, W)
+    :return: output tensor;  shape: (n_b, H, W)
     """
     assert x.dim() == 3, "input tensor must be 3D"
     n_b, dim1, dim2 = x.shape
@@ -198,31 +198,40 @@ class ResML(nn.Module):
 class CFConv(nn.Module):
     def __init__(self, n_kernel: int = 20, n_feature: int = 128) -> None:
         """
-        Contiunous-filter convolution block.
+        Improved Contiunous-filter convolution block.
 
         :param n_kernel: number of RBF kernels
         :param n_feature: number of feature dimensions
         """
         super().__init__()
         self.n_feature = n_feature
-        self.w = nn.Sequential(
-            nn.Linear(in_features=n_kernel, out_features=n_feature * 3, bias=True),
+        self.w1 = nn.Sequential(
+            nn.Linear(in_features=n_kernel, out_features=n_feature, bias=True),
+            nn.SiLU(),
+        )
+        self.w2 = nn.Sequential(
+            nn.Linear(in_features=n_kernel, out_features=n_feature, bias=True),
             nn.SiLU(),
         )
         self.phi = nn.Sequential(
             nn.Linear(in_features=n_feature, out_features=n_feature, bias=True),
             nn.SiLU(),
-            nn.Linear(in_features=n_feature, out_features=n_feature * 3, bias=True),
+        )
+        self.o = nn.Linear(
+            in_features=n_feature * 2, out_features=n_feature * 3, bias=True
         )
         nn.init.uniform_(
-            self.w[0].weight, -((6 / n_kernel) ** 0.5), (6 / n_kernel) ** 0.5
+            self.w1[0].weight, -((6 / n_kernel) ** 0.5), (6 / n_kernel) ** 0.5
+        )  # weight init: U[-(6/in_dim)^1/2, (6/in_dim)^1/2]
+        nn.init.uniform_(
+            self.w2[0].weight, -((6 / n_kernel) ** 0.5), (6 / n_kernel) ** 0.5
         )  # weight init: U[-(6/in_dim)^1/2, (6/in_dim)^1/2]
         nn.init.normal_(
             self.phi[0].weight, 0, 0.5 * (6 / n_feature) ** 0.5
         )  # weight init: N[0.0, (3/(2 dim))^1/2]
 
     def forward(
-        self, x: Tensor, e: Tensor, mask: Tensor, loop_mask: Optional[Tensor]
+        self, x: Tensor, e: Tensor, mask: Tensor, loop_mask: Tensor
     ) -> Tuple[Tensor]:
         """
         :param x: input info;              shape: (n_b, n_a, n_f)
@@ -233,23 +242,19 @@ class CFConv(nn.Module):
         :return: convoluted info;          shape: (n_b, n_a, n_a - 1, n_f) * 3
                                                or (n_b, n_a, n_a - 1, 3, n_f) * 3
         """
-        w = self.w(e)
+        w1, w2 = self.w1(e), self.w2(e)
         x = self.phi(x)
-        if loop_mask is None:
-            # simplified CFConv
-            if w.dim() == 4:
-                v = x.unsqueeze(dim=-2) * w * mask
-            else:
-                v = x[:, :, None, None, :] * w * mask.unsqueeze(dim=-2)
-        else:
-            # CFConv: loop_mask helps to remove self-loop
-            n_b, n_a, f = x.shape
-            x_nbs = x.unsqueeze(dim=-3).repeat(1, n_a, 1, 1)
-            x_nbs = x_nbs[loop_mask].view(n_b, n_a, n_a - 1, f)
-            if w.dim() == 4:
-                v = x_nbs * w * mask
-            else:  # higher order L = 3
-                v = x_nbs.unsqueeze(dim=-2) * w * mask.unsqueeze(dim=-2)
+        n_b, n_a, f = x.shape
+        x_nbs = x.unsqueeze(dim=-3).repeat(1, n_a, 1, 1)
+        x_nbs = x_nbs[loop_mask].view(n_b, n_a, n_a - 1, f)
+        if e.dim() == 4:
+            v1 = x.unsqueeze(dim=-2) * w1 * mask
+            v2 = x_nbs * w2 * mask
+            v = self.o(torch.cat([v1, v2], dim=-1)) * mask
+        else:  # higher order L = 3
+            v1 = x[:, :, None, None, :] * w1 * mask.unsqueeze(dim=-2)
+            v2 = x_nbs.unsqueeze(dim=-2) * w2 * mask.unsqueeze(dim=-2)
+            v = self.o(torch.cat([v1, v2], dim=-1)) * mask.unsqueeze(dim=-2)
         s1, s2, s3 = torch.split(
             v,
             split_size_or_sections=self.n_feature,
@@ -357,7 +362,7 @@ class Interaction(nn.Module):
         e: Tensor,
         d_vec_norm: Tensor,
         mask: Tensor,
-        loop_mask: Optional[Tensor],
+        loop_mask: Tensor,
         return_attn_matrix: bool = False,
     ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
         """
@@ -385,13 +390,7 @@ class Interaction(nn.Module):
         )
         s_m = s_n1 + s_n2 * (v1 * v2).sum(dim=-2)
         s_out = self.res(s_m)
-        if loop_mask is None:
-            v = v.unsqueeze(dim=-3)
-        else:
-            n_b, n_a, _, f = v.shape
-            v = v.unsqueeze(dim=-4)
-            v = v.repeat(1, n_a, 1, 1, 1)
-            v = v[loop_mask].view(n_b, n_a, n_a - 1, 3, f)
+        v = v.unsqueeze(dim=-3)
         if s1.dim() == 4:
             v_m = s_n3.unsqueeze(dim=-2) * v3 + (
                 s2.unsqueeze(dim=-2) * v + s3.unsqueeze(dim=-2) * d_vec_norm

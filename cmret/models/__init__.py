@@ -7,7 +7,10 @@ from pathlib import Path
 import torch
 
 pretrain = Path(__file__).parent
-names = {"carbene": pretrain / "carbene.h5"}
+names = {
+    "carbene": pretrain / "carbene.h5",
+    "ethanol": pretrain / "ethanol.h5",
+}
 
 
 def trained_model(name: str) -> torch.nn.Module:

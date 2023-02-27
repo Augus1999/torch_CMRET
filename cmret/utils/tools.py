@@ -8,7 +8,7 @@ import re
 import glob
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict, Union, Generator
+from typing import Optional, List, Dict, Union, Generator, Callable
 import torch
 import torch.nn as nn
 import torch.optim as op
@@ -45,14 +45,17 @@ class _TwoCycleLR:
             self._remove_weakref()
 
     def _remove_weakref(self) -> None:
-        self.scheduler._scale_fn_custom = self.scheduler._scale_fn_ref()
-        self.scheduler._scale_fn_ref = None
+        try:
+            self.scheduler._scale_fn_custom = self.scheduler._scale_fn_ref()
+            self.scheduler._scale_fn_ref = None
+        except AttributeError:
+            pass
 
 
 def energy_force_loss(
     out: Dict[str, Tensor],
     label: Dict[str, Tensor],
-    loss_f: object,
+    loss_f: Callable[[Tensor, Tensor], Tensor],
     raw: bool = False,
 ) -> Union[Tensor, Dict]:
     """
@@ -78,7 +81,7 @@ def energy_force_loss(
 def energy_loss(
     out: Dict[str, Tensor],
     label: Dict[str, Tensor],
-    loss_f: object,
+    loss_f: Callable[[Tensor, Tensor], Tensor],
     raw: bool = False,
 ) -> Union[Tensor, Dict]:
     """
@@ -96,6 +99,24 @@ def energy_loss(
     if raw:
         return {"energy": loss}
     return loss
+
+
+def pretrain_loss(
+    out: Dict[str, Tensor],
+    label: Dict[str, Tensor],
+    loss_f: Callable[[Tensor, Tensor], Tensor],
+) -> Tensor:
+    """
+    Claculate the pretrain loss
+
+    :param out: output of model
+    :param label: training set label
+    :param loss_f: loss function
+    :return: pre-train loss
+    """
+    geometry = label["R"]
+    out_geometry = out["v"].sum(dim=-1)
+    return loss_f(out_geometry, geometry)
 
 
 def train(

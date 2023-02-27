@@ -13,16 +13,23 @@ from .module import GatedEquivariant
 
 class EquivarientScalar(nn.Module):
     def __init__(
-        self, n_feature: int = 128, n_output: int = 2, dy: bool = True
+        self,
+        n_feature: int = 128,
+        n_output: int = 2,
+        dy: bool = True,
+        return_vector_feature: bool = False,
     ) -> None:
         """
         Equivariant Scalar output block.
+
         :param n_feature: input feature
         :param n_output: number of output layers
-        :param dy: whether calculater -dy
+        :param dy: whether to calculater -dy
+        :param return_vector_feature: whether to return the vector features
         """
         super().__init__()
         self.dy = dy
+        self.return_v = return_vector_feature
         self.block = nn.ModuleList(
             [GatedEquivariant(n_feature=n_feature) for _ in range(n_output)]
         )
@@ -34,18 +41,19 @@ class EquivarientScalar(nn.Module):
             s, v = layer(s, v)
         s = self.out(s)
         y = s.sum(dim=-2)
-        dy = (
-            grad(
+        out = {"energy": y}
+        if self.dy:
+            dy = grad(
                 outputs=y,
                 inputs=r,
                 grad_outputs=torch.ones_like(y),
                 retain_graph=self.training,
                 create_graph=self.training,
             )[0]
-            if self.dy
-            else 0
-        )
-        return {"energy": y, "force": -dy}
+            out["force"] = -dy
+        if self.return_v:
+            out["v"] = v
+        return out
 
 
 class EquivariantDipoleMoment(nn.Module):
