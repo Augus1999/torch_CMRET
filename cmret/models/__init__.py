@@ -10,6 +10,7 @@ pretrain = Path(__file__).parent
 names = {
     "carbene": pretrain / "carbene.h5",
     "ethanol": pretrain / "ethanol.h5",
+    "benzene": pretrain / "benzene.h5",
 }
 
 

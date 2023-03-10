@@ -358,6 +358,7 @@ class Interaction(nn.Module):
     def forward(
         self,
         s: Tensor,
+        o: Tensor,
         v: Tensor,
         e: Tensor,
         d_vec_norm: Tensor,
@@ -367,6 +368,7 @@ class Interaction(nn.Module):
     ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
         """
         :param s: scale info;                 shape: (n_b, n_a, n_f)
+        :param o: scale from pervious layer;  shape: (n_b, n_a, n_f)
         :param v: vector info;                shape: (n_b, n_a, 3, n_f)
         :param e: rbf extended distances;     shape: (n_b, n_a, n_a - 1, n_k)
         :param d_vec_norm: normalised d_vec;  shape: (n_b, n_a, n_a - 1, 3, 1)
@@ -389,7 +391,7 @@ class Interaction(nn.Module):
             dim=-1,
         )
         s_m = s_n1 + s_n2 * (v1 * v2).sum(dim=-2)
-        s_out = self.res(s_m)
+        s_out = self.res(s_m) + o
         v = v.unsqueeze(dim=-3)
         if s1.dim() == 4:
             v_m = s_n3.unsqueeze(dim=-2) * v3 + (

@@ -127,7 +127,7 @@ def train(
     unit: str = "eV",
     load: Optional[str] = None,
     log_dir: Optional[str] = None,
-    work_dir: str = "workdir",
+    work_dir: str = ".",
     save_every: Optional[int] = None,
 ) -> None:
     """

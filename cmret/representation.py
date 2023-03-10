@@ -22,7 +22,7 @@ class CMRET(nn.Module):
         cutoff: float = 5.0,
         n_kernel: int = 20,
         n_atom_basis: int = 128,
-        n_interaction: int = 5,
+        n_interaction: int = 6,
         rbf_type: str = "gaussian",
         num_head: int = 1,
         attention_activation: str = "softmax",
@@ -99,6 +99,7 @@ class CMRET(nn.Module):
         loop_mask = torch.eye(z.shape[-1], device=z.device)
         loop_mask = loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
         s = self.embedding(z)
+        o = torch.zeros_like(s)
         d, d_vec, d0 = self.distance(r, loop_mask, return_adjacency_matrix)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
@@ -110,19 +111,18 @@ class CMRET(nn.Module):
         else:
             e = cutoff.unsqueeze(dim=-2) * e
         d_vec_norm = (mask * d_vec / d.unsqueeze(dim=-1)).unsqueeze(dim=-1)
-        s_o, attn = 0, []
+        attn = []
         for layer in self.interaction:
             s, o, v, _attn = layer(
-                s, v, e, d_vec_norm, mask, loop_mask, return_attn_matrix
+                s, o, v, e, d_vec_norm, mask, loop_mask, return_attn_matrix
             )
-            s_o += o
             if return_attn_matrix:
                 if average_attn_matrix_over_layers:
                     attn.append(_attn.unsqueeze(dim=0))
                 else:
                     attn.append(_attn)
-        s_o = self.norm(s_o)
-        out = self.out(z=z, s=s_o, v=v, r=r)
+        o = self.norm(o)
+        out = self.out(z=z, s=o, v=v, r=r)
         if return_adjacency_matrix:
             out["adj_matrix"] = adj
         if return_attn_matrix:
@@ -138,7 +138,7 @@ class CMRETModel(nn.Module):
         cutoff: float = 5.0,
         n_kernel: int = 20,
         n_atom_basis: int = 128,
-        n_interaction: int = 5,
+        n_interaction: int = 6,
         n_output: int = 2,
         rbf_type: str = "gaussian",
         num_head: int = 1,
@@ -176,6 +176,8 @@ class CMRETModel(nn.Module):
                 dy=dy,
                 return_vector_feature=True,
             )
+        else:
+            raise NotImplementedError(f"{output_mode} is not defined.")
         self.model = CMRET(
             output=out,
             cutoff=cutoff,
