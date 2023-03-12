@@ -16,21 +16,19 @@ model = CMRETModel()
 
 ### train the model
 ```python
-from torch.utils.data import DataLoader
 from cmret.utils import train, DataSet
 
 workdir = "carbene"
 dataset = DataSet("QM.CH2", "dataset", mode="train", limit=None)
-trainset = DataLoader(dataset.data, batch_size=10, shuffle=True)
-train(model=model, train_set=trainset, unit=dataset.unit, work_dir=workdir)
+train(model=model, dataset=dataset.data, unit=dataset.unit, work_dir=workdir)
 ```
 
 ### test the model
 ```python
 from cmret.utils import test, DataSet
 
-dataset = DataSet("QM.CH2", "dataset", mode="test", limit=None).data
-print(test(model=model, dataset=dataset, load=f"{workdir}/trained.pt"))
+dataset = DataSet("QM.CH2", "dataset", mode="test", limit=None)
+print(test(model=model, dataset=dataset.data, load=f"{workdir}/trained.pt"))
 ```
 
 ### running Molecular Dynamics

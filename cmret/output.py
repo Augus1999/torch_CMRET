@@ -36,11 +36,11 @@ class EquivarientScalar(nn.Module):
         self.out = nn.Linear(in_features=n_feature, out_features=1, bias=True)
 
     def forward(self, **kargv: Tensor) -> Dict[str, Tensor]:
-        s, v, r = kargv["s"], kargv["v"], kargv["r"]
+        s, v, r, batch_mask = kargv["s"], kargv["v"], kargv["r"], kargv["batch"]
         for layer in self.block:
             s, v = layer(s, v)
         s = self.out(s)
-        y = s.sum(dim=-2)
+        y = (s.repeat(batch_mask.shape[0], 1, 1) * batch_mask).sum(dim=-2)
         out = {"energy": y}
         if self.dy:
             dy = grad(
@@ -71,9 +71,12 @@ class EquivariantDipoleMoment(nn.Module):
 
     def forward(self, **kargv: Tensor) -> Dict[str, Tensor]:
         z, s, v, r = kargv["z"], kargv["s"], kargv["v"], kargv["r"]
+        batch_mask = kargv["batch"]
+        r = r.repeat(batch_mask.shape[0], 1, 1) * batch_mask
+        z = z.repeat(batch_mask.shape[0], 1, 1) * batch_mask
         mass_centre = (z.unsqueeze(dim=-1) * r) / z.sum(dim=-1)[:, None, None]
         for layer in self.block:
             s, v = layer(s, v)
         mu = (v + s.unsequeeze(dim=-2) * (r - mass_centre).unsqueeze(dim=-1)).sum(dim=1)
-        mu = torch.linalg.norm(mu, 2, -1)
+        mu = torch.linalg.norm(mu, 2, -2)
         return {"dipole moment": mu}

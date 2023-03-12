@@ -114,14 +114,62 @@ def pretrain_loss(
     :param loss_f: loss function
     :return: pre-train loss
     """
-    geometry = label["R"]
-    out_geometry = out["v"].sum(dim=-1)
+    geometry = label["R"].flatten()
+    out_geometry = out["v"].sum(dim=-1).flatten()
     return loss_f(out_geometry, geometry)
+
+
+def collate(batch: List) -> Dict[str, Tensor]:
+    """
+    Collate different molecules into one batch.
+
+    :param batch: a list of data (one batch)
+    :return: batched {"mol": mol, "label": label}
+    """
+    mol = [i["mol"] for i in batch]
+    label = [i["label"] for i in batch]
+    charges, positions, batch_idx, mask = [], [], [], []
+    energies, forces = [], []
+    charge, spin = [], []
+    for key, item in enumerate(mol):
+        batch_idx.append(item["batch"] * key)
+        charges.append(item["Z"])
+        positions.append(item["R"])
+        energies.append(label[key]["E"].unsqueeze(dim=0))
+        forces.append(label[key]["F"])
+        if "Q" in item:
+            charge.append(item["Q"].unsqueeze(dim=0))
+        if "S" in item:
+            spin.append(item["S"].unsqueeze(dim=0))
+    batch_idx = torch.cat(batch_idx, dim=-1)
+    charges = torch.cat(charges, dim=0).unsqueeze(dim=0)
+    positions = torch.cat(positions, dim=0).unsqueeze(dim=0)
+    energies = torch.cat(energies, dim=0)
+    forces = torch.cat(forces, dim=0).unsqueeze(dim=0)
+    n_total = charges.shape[1]
+    i = 0
+    for item in mol:
+        _batch = item["batch"]
+        n = _batch.shape[-1]
+        p1, p2 = torch.zeros(1, i), torch.zeros(1, n_total - n - i)
+        mask.append(torch.cat([p1, _batch, p2], dim=-1))
+        i += n
+    mask = torch.cat(mask, dim=0).unsqueeze(dim=-1)
+    mol = {"Z": charges, "R": positions, "batch": batch_idx, "mask": mask}
+    if charge:
+        charge = torch.cat(charge, dim=0)
+        mol["Q"] = charge
+    if spin:
+        spin = torch.cat(spin, dim=0)
+        mol["S"] = spin
+    label = {"E": energies, "F": forces}
+    return {"mol": mol, "label": label}
 
 
 def train(
     model: nn.Module,
-    train_set: DataLoader,
+    dataset: Generator,
+    batch_size: int = 5,
     max_n_epochs: int = 20000,
     loss_calculator=energy_force_loss,
     unit: str = "eV",
@@ -134,7 +182,8 @@ def train(
     Trian the network.
 
     :param model: model for training
-    :param train_set: training set
+    :param dataset: training set
+    :param batch_size: mini-batch size 
     :param max_n_epochs: max training epochs size
     :param loss_calculator: loss calculator
     :param unit: dataset energy unit
@@ -155,7 +204,8 @@ def train(
         level=logging.DEBUG,
     )
     start_epoch: int = 0
-    train_size = len(train_set)
+    loader = DataLoader(dataset=dataset, batch_size=batch_size, collate_fn=collate)
+    train_size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device=device).train()
     optimizer = op.Adam(model.parameters(), lr=1e-8, amsgrad=False)
@@ -178,7 +228,7 @@ def train(
     logging.info("start training")
     for epoch in range(start_epoch, max_n_epochs):
         running_loss = 0.0
-        for key, d in enumerate(train_set):
+        for key, d in enumerate(loader):
             mol, label = d["mol"], d["label"]
             for i in mol:
                 mol[i] = mol[i].to(device)
@@ -230,7 +280,7 @@ def test(
     :param metric_type: chosen from 'MAE' and 'RMSE'
     :return: test metrics
     """
-    loader = DataLoader(dataset=dataset, batch_size=50)
+    loader = DataLoader(dataset=dataset, batch_size=10, collate_fn=collate)
     size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.pretrained(file=load).to(device=device).eval()

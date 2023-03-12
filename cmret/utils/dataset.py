@@ -6,7 +6,9 @@ The item returned from these classes is a python
 dictionary: {"mol": mol_dict, "label": label_dict},
 where mol_dict is a dictionary as {
                                     "Z": nuclear charges (Tensor), 
-                                    "R": atomic positions (Tensor), 
+                                    "R": atomic positions (Tensor),
+                                    "batch": batch indices (Tensor),
+                                    "mask": batch mask (Tensor),
                                     "Q": molecular net charge (Tensor) which is optional,
                                     "S": spin state (Tensor) which is optional,
                                     }
@@ -59,7 +61,8 @@ class ASEData(data.Dataset):
         positions = torch.tensor(d.positions, dtype=torch.float32)
         forces = torch.tensor(d.data.F, dtype=torch.float32)
         energy = torch.tensor(d.data.E, dtype=torch.float32)
-        mol = {"Z": charges, "R": positions}
+        batch_idx = torch.ones(1, charges.shape[0])
+        mol = {"Z": charges, "R": positions, "batch": batch_idx}
         if "S" in d.data:
             spin = torch.tensor(d.data.S, dtype=torch.float32)
             mol["S"] = spin
@@ -98,7 +101,8 @@ class XYZData(data.Dataset):
         positions = torch.tensor(d.positions, dtype=torch.float32)
         forces = torch.tensor(d.get_forces(), dtype=torch.float32)
         energy = torch.tensor([d.get_total_energy()], dtype=torch.float32)
-        mol = {"Z": charges, "R": positions}
+        batch_idx = torch.ones(1, charges.shape[0])
+        mol = {"Z": charges, "R": positions, "batch": batch_idx}
         label = {"E": energy, "F": forces}
         return {"mol": mol, "label": label}
 

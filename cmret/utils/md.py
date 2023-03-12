@@ -102,6 +102,8 @@ class Molecule:
         self.energy, self.molecule = [], []  # clear list
         self.calculator = self.calculator.to(device=self.device).eval()
         mol = {"Z": self.Z.to(device=self.device), "R": self.R.to(device=self.device)}
+        mol["batch"] = torch.ones_like(mol["Z"])
+        mol["mask"] = mol["batch"].unsqueeze(dim=-1)
         if self.Q:
             mol["Q"] = self.Q.to(device=self.device)
         atoms = Atoms(numbers=self.Z[0].numpy(), positions=mol["R"][0].detach().numpy())

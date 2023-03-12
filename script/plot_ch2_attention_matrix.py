@@ -17,7 +17,12 @@ labels = ["C", "H", "H"]
 
 for i in range(len(r3s)):
     R = torch.tensor([[[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], r3s[i]]])
-    mol = {"Z": Z, "R": R}
+    mol = {
+        "Z": Z,
+        "R": R,
+        "batch": torch.ones_like(Z),
+        "mask": torch.ones_like(Z)[:, :, None],
+    }
     out = model(mol, return_attn_matrix=True, average_attn_matrix_over_layers=False)
     alphas = out["attn_matrix"]
     alphas2.append(alphas)
@@ -87,8 +92,6 @@ for key, alphas in enumerate(alphas2):
         f"Attention matrix of Carbene (H-C-H angle of {label_map[key]}°) in each Interaction block."
     )
     plt.tight_layout()
-    plt.savefig(
-        f"attention_matrix_CH2_{key+1}.png", dpi=250
-    )  # you can change the file names here
+    plt.savefig(f"attention_matrix_CH2_{key+1}.png", dpi=250)
     plt.show()  # ご注意：comment this line if running this script on supercomputer
-    #        because it has no graphic interface to display images.
+    #                    because it has no graphic interface to display images.
