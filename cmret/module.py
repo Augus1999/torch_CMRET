@@ -308,7 +308,7 @@ class NonLoacalInteraction(nn.Module):
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """
         :param x: input tensor;            shape: (1, n_b * n_a, n_f)
-        :param batch_mask: batch mask;     shape: (1, n_b * n_a, n_a)
+        :param batch_mask: batch mask;     shape: (1, n_b * n_a, n_b * n_a)
         :param return_attn_matrix: whether to return the attenton matrix
         :return: attention-scored output;  shape: (1, n_b * n_a, n_f)
                  attention matrix;         shape: (1, n_b * n_a, n_a)
@@ -317,7 +317,9 @@ class NonLoacalInteraction(nn.Module):
         key = self.k(x)
         value = self.v(x)
         if self.multi:
-            out, alpha = self.activate(query, key, value)
+            out, alpha = self.activate(
+                query, key, value, attn_mask=batch_mask.squeeze(dim=0)
+            )
         else:
             a = query @ key.transpose(-2, -1) / self.temp
             alpha = self.activate(a.masked_fill(batch_mask, -torch.inf))
@@ -379,7 +381,7 @@ class Interaction(nn.Module):
         :param d_vec_norm: normalised d_vec;  shape: (1, n_b * n_a, n_a - 1, 3, 1)
         :param mask: neighbour mask;          shape: (1, n_b * n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;     shape: (1, n_b * n_a, n_a)
-        :param batch_mask: batch mask;        shape: (1, n_b * n_a, n_a)
+        :param batch_mask: batch mask;        shape: (1, n_b * n_a, n_b * n_a)
         :param return_attn_matrix: whether to return the attenton matrix
         :return: new scale & output scale & vector info & attention matrix
         """

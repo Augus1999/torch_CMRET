@@ -99,7 +99,7 @@ class CMRET(nn.Module):
             z_info = z.repeat(s_info.shape[0], 1) * mask1.squeeze(dim=-1)
             q_info = q_info / z_info.sum(dim=-1, keepdim=True)
             v_ = v.repeat(q_info.shape[0], 1, 1, 1) * mask1.unsqueeze(dim=-1)
-            v_ = v_ + q_info[:, :, None, None]
+            v_ = v_ - q_info[:, :, None, None]
             v = v_[mask1.squeeze(-1) != 0].view(v.shape)
         if "S" in mol:
             s_info = mol["S"]

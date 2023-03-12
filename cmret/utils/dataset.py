@@ -8,7 +8,6 @@ where mol_dict is a dictionary as {
                                     "Z": nuclear charges (Tensor), 
                                     "R": atomic positions (Tensor),
                                     "batch": batch indices (Tensor),
-                                    "mask": batch mask (Tensor),
                                     "Q": molecular net charge (Tensor) which is optional,
                                     "S": spin state (Tensor) which is optional,
                                     }

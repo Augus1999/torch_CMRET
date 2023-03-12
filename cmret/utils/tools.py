@@ -183,7 +183,7 @@ def train(
 
     :param model: model for training
     :param dataset: training set
-    :param batch_size: mini-batch size 
+    :param batch_size: mini-batch size
     :param max_n_epochs: max training epochs size
     :param loss_calculator: loss calculator
     :param unit: dataset energy unit
@@ -204,7 +204,9 @@ def train(
         level=logging.DEBUG,
     )
     start_epoch: int = 0
-    loader = DataLoader(dataset=dataset, batch_size=batch_size, collate_fn=collate)
+    loader = DataLoader(
+        dataset=dataset, batch_size=batch_size, collate_fn=collate, shuffle=True
+    )
     train_size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device=device).train()
