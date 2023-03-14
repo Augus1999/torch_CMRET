@@ -125,18 +125,34 @@ def collate(batch: List) -> Dict[str, Tensor]:
 
     :param batch: a list of data (one batch)
     :return: batched {"mol": mol, "label": label}
+                      mol == {
+                                "Z": atomic numbers
+                                "R": coordinates
+                                "Q": molecular net charges (optional)
+                                "S": net spin state (optional)
+                                "batch": batch indices (for instance molecule A has 4 atoms
+                                                        and molecule B has 3 atoms then the
+                                                        batched indices is [0, 0, 0, 0, 1, 1, 1])
+                                "mask": batch mask (for instance molecule A has 4 atoms
+                                                    and molecule B has 3 atoms then the
+                                                    batched indices is [[1, 1, 1, 1, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]])
+                      }
     """
     mol = [i["mol"] for i in batch]
     label = [i["label"] for i in batch]
     charges, positions, batch_idx, mask = [], [], [], []
-    energies, forces = [], []
+    energies, forces, coords = [], [], []
     charge, spin = [], []
     for key, item in enumerate(mol):
         batch_idx.append(item["batch"] * key)
         charges.append(item["Z"])
         positions.append(item["R"])
-        energies.append(label[key]["E"].unsqueeze(dim=0))
-        forces.append(label[key]["F"])
+        if "E" in label[key]:
+            energies.append(label[key]["E"].unsqueeze(dim=0))
+        if "F" in label[key]:
+            forces.append(label[key]["F"])
+        if "R" in label[key]:
+            coords.append(label[key]["R"])
         if "Q" in item:
             charge.append(item["Q"].unsqueeze(dim=0))
         if "S" in item:
@@ -144,8 +160,6 @@ def collate(batch: List) -> Dict[str, Tensor]:
     batch_idx = torch.cat(batch_idx, dim=-1)
     charges = torch.cat(charges, dim=0).unsqueeze(dim=0)
     positions = torch.cat(positions, dim=0).unsqueeze(dim=0)
-    energies = torch.cat(energies, dim=0)
-    forces = torch.cat(forces, dim=0).unsqueeze(dim=0)
     n_total = charges.shape[1]
     i = 0
     for item in mol:
@@ -157,12 +171,16 @@ def collate(batch: List) -> Dict[str, Tensor]:
     mask = torch.cat(mask, dim=0).unsqueeze(dim=-1)
     mol = {"Z": charges, "R": positions, "batch": batch_idx, "mask": mask}
     if charge:
-        charge = torch.cat(charge, dim=0)
-        mol["Q"] = charge
+        mol["Q"] = torch.cat(charge, dim=0)
     if spin:
-        spin = torch.cat(spin, dim=0)
-        mol["S"] = spin
-    label = {"E": energies, "F": forces}
+        mol["S"] = torch.cat(spin, dim=0)
+    label = {}
+    if energies:
+        label["E"] = torch.cat(energies, dim=0)
+    if forces:
+        label["F"] = torch.cat(forces, dim=0).unsqueeze(dim=0)
+    if coords:
+        label["R"] = torch.cat(coords, dim=0).unsqueeze(dim=0)
     return {"mol": mol, "label": label}
 
 

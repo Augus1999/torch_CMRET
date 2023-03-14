@@ -141,7 +141,7 @@ class Distance(nn.Module):
     ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         """
         :param r: nuclear coordinates;  shape: (1, n_b * n_a, 3)
-        :param batch_mask: batch mask;  shape: (1, n_b * n_a, n_a, 1)
+        :param batch_mask: batch mask;  shape: (1, n_b * n_a, n_b * n_a, 1)
         :param loop_mask: loop mask;    shape: (1, n_b * n_a, n_a)
         :param return_d0: whether to return the original distance matrix
         :return: d, d_vec;              shape: (1, n_b * n_a, n_a - 1), (1, n_b * n_a, n_a - 1, 3)
