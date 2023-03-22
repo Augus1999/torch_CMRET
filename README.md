@@ -3,7 +3,7 @@ CMRET is an equivarient garph neural network that maps molecular geometry to its
 
 ![OS](https://img.shields.io/badge/OS-Windows%20|%20Linux%20|%20macOS-blue?color=00b166)
 ![python](https://img.shields.io/badge/Python-3.9%20|%203.10-blue.svg?color=dd9b65)
-![torch](https://img.shields.io/badge/torch-1.13-blue?color=708ddd)
+![torch](https://img.shields.io/badge/torch-2.0-blue?color=708ddd)
 ![black](https://img.shields.io/badge/code%20style-black-black)
 
 ## API

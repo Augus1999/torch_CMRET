@@ -81,8 +81,7 @@ class CMRET(nn.Module):
         :param mol: molecule = {
             "Z": nuclear charges tensor;      shape: (1, n_b * n_a)
             "R": nuclear coordinates tensor;  shape: (1, n_b * n_a, 3)
-            "batch": batch indices;           shape: (1, n_b * n_a)
-            "mask": batch mask;               shape: (n_b, n_b * n_a, 1)
+            "batch": batch mask;              shape: (n_b, n_b * n_a, 1)
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }
@@ -91,23 +90,23 @@ class CMRET(nn.Module):
         :param average_attn_matrix_over_layers: whether to average the attention matrices over layers
         :return: molecular properties (e.g. energy, atomic forces, dipole moment)
         """
-        z, r, batch, mask1 = mol["Z"], mol["R"], mol["batch"], mol["mask"]
+        z, r, batch = mol["Z"], mol["R"], mol["batch"]
         r.requires_grad = self.dy
         v = torch.zeros_like(r).unsqueeze(dim=-1).repeat(1, 1, 1, self.n)
         if "Q" in mol:
             q_info = mol["Q"]
-            z_info = z.repeat(s_info.shape[0], 1) * mask1.squeeze(dim=-1)
+            z_info = z.repeat(s_info.shape[0], 1) * batch.squeeze(dim=-1)
             q_info = q_info / z_info.sum(dim=-1, keepdim=True)
-            v_ = v.repeat(q_info.shape[0], 1, 1, 1) * mask1.unsqueeze(dim=-1)
+            v_ = v.repeat(q_info.shape[0], 1, 1, 1) * batch.unsqueeze(dim=-1)
             v_ = v_ - q_info[:, :, None, None]
-            v = v_[mask1.squeeze(-1) != 0].view(v.shape)
+            v = v_[batch.squeeze(-1) != 0].view(v.shape)
         if "S" in mol:
             s_info = mol["S"]
-            z_info = z.repeat(s_info.shape[0], 1) * mask1.squeeze(dim=-1)
+            z_info = z.repeat(s_info.shape[0], 1) * batch.squeeze(dim=-1)
             s_info = s_info / z_info.sum(dim=-1, keepdim=True)
-            v_ = v.repeat(s_info.shape[0], 1, 1, 1) * mask1.unsqueeze(dim=-1)
+            v_ = v.repeat(s_info.shape[0], 1, 1, 1) * batch.unsqueeze(dim=-1)
             v_ = v_ + s_info[:, :, None, None]
-            v = v_[mask1.squeeze(-1) != 0].view(v.shape)
+            v = v_[batch.squeeze(-1) != 0].view(v.shape)
         # --------- compute loop mask that removes the self-loop ----------------
         loop_mask = torch.eye(z.shape[-1], device=z.device)
         loop_mask = loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
@@ -115,10 +114,9 @@ class CMRET(nn.Module):
         s = self.embedding(z)
         o = torch.zeros_like(s)
         # ---- compute batch mask that seperates atoms in different molecules ----
-        b1 = batch.unsqueeze(dim=-1) * batch.unsqueeze(dim=-1).transpose(-2, -1)
-        b2 = batch.unsqueeze(dim=-1) + batch.unsqueeze(dim=-1).transpose(-2, -1)
-        batch_mask_ = b1.sqrt() != (b2 / 2)
-        batch_mask = torch.ones_like(b1).masked_fill(batch_mask_, 0).unsqueeze(-1)
+        batch_mask_ = batch.squeeze(-1).transpose(-2, -1) @ batch.squeeze(-1)
+        batch_mask = batch_mask_[None, :, :, None]
+        batch_mask_ = batch_mask_ == 0
         # ------------------------------------------------------------------------
         d, d_vec, d0 = self.distance(r, batch_mask, loop_mask, return_adjacency_matrix)
         cutoff, mask = self.cutoff(d)
@@ -146,7 +144,7 @@ class CMRET(nn.Module):
                 else:
                     attn.append(_attn)
         o = self.norm(o)
-        out = self.out(z=z, s=o, v=v, r=r, batch=mask1)
+        out = self.out(z=z, s=o, v=v, r=r, batch=batch)
         if return_adjacency_matrix:
             out["adj_matrix"] = adj * batch_mask.squeeze(dim=-1)
         if return_attn_matrix:

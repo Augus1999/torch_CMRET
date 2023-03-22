@@ -28,7 +28,6 @@ class _TwoCycleLR:
             step_size_down=total_steps // 2 - step_size_up,
             cycle_momentum=False,
         )
-        self._remove_weakref()
 
     def step(self, step_idx: int) -> None:
         self.scheduler.step()
@@ -42,14 +41,6 @@ class _TwoCycleLR:
                 cycle_momentum=False,
             )
             self.scheduler.last_epoch = -1
-            self._remove_weakref()
-
-    def _remove_weakref(self) -> None:
-        try:
-            self.scheduler._scale_fn_custom = self.scheduler._scale_fn_ref()
-            self.scheduler._scale_fn_ref = None
-        except AttributeError:
-            pass
 
 
 def energy_force_loss(
@@ -130,21 +121,17 @@ def collate(batch: List) -> Dict[str, Tensor]:
                                 "R": coordinates
                                 "Q": molecular net charges (optional)
                                 "S": net spin state (optional)
-                                "batch": batch indices (for instance molecule A has 4 atoms
-                                                        and molecule B has 3 atoms then the
-                                                        batched indices is [0, 0, 0, 0, 1, 1, 1])
-                                "mask": batch mask (for instance molecule A has 4 atoms
-                                                    and molecule B has 3 atoms then the
-                                                    batched indices is [[1, 1, 1, 1, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]])
+                                "batch": batch mask (for instance molecule A has 4 atoms
+                                                     and molecule B has 3 atoms then the
+                                                     batched indices is [[1, 1, 1, 1, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]])
                       }
     """
     mol = [i["mol"] for i in batch]
     label = [i["label"] for i in batch]
-    charges, positions, batch_idx, mask = [], [], [], []
+    charges, positions, mask = [], [], []
     energies, forces, coords = [], [], []
     charge, spin = [], []
     for key, item in enumerate(mol):
-        batch_idx.append(item["batch"] * key)
         charges.append(item["Z"])
         positions.append(item["R"])
         if "E" in label[key]:
@@ -157,19 +144,18 @@ def collate(batch: List) -> Dict[str, Tensor]:
             charge.append(item["Q"].unsqueeze(dim=0))
         if "S" in item:
             spin.append(item["S"].unsqueeze(dim=0))
-    batch_idx = torch.cat(batch_idx, dim=-1)
     charges = torch.cat(charges, dim=0).unsqueeze(dim=0)
     positions = torch.cat(positions, dim=0).unsqueeze(dim=0)
     n_total = charges.shape[1]
     i = 0
     for item in mol:
-        _batch = item["batch"]
-        n = _batch.shape[-1]
+        n = item["Z"].shape[0]
+        batch = torch.ones(1, n)
         p1, p2 = torch.zeros(1, i), torch.zeros(1, n_total - n - i)
-        mask.append(torch.cat([p1, _batch, p2], dim=-1))
+        mask.append(torch.cat([p1, batch, p2], dim=-1))
         i += n
     mask = torch.cat(mask, dim=0).unsqueeze(dim=-1)
-    mol = {"Z": charges, "R": positions, "batch": batch_idx, "mask": mask}
+    mol = {"Z": charges, "R": positions, "batch": mask}
     if charge:
         mol["Q"] = torch.cat(charge, dim=0)
     if spin:
@@ -230,7 +216,7 @@ def train(
     model = model.to(device=device).train()
     optimizer = op.Adam(model.parameters(), lr=1e-8, amsgrad=False)
     scheduler = _TwoCycleLR(optimizer=optimizer, total_steps=max_n_epochs * train_size)
-    logging.info(f"using hardware {device}")
+    logging.info(f"using hardware {str(device).upper()}")
     logging.debug(f"{model.check_parameter_number} trainable parameters")
     if load:
         with open(load, mode="rb") as sf:
