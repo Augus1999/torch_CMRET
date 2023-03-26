@@ -9,20 +9,6 @@ import torch.nn as nn
 from torch import Tensor
 
 
-def softmax2d(x: Tensor) -> Tensor:
-    """
-    Applies Softmax over last two dimensions.
-
-    :param x: input tensor;  shape: (n_b, H, W)
-    :return: output tensor;  shape: (n_b, H, W)
-    """
-    assert x.dim() == 3, "input tensor must be 3D"
-    n_b, dim1, dim2 = x.shape
-    x = x.view(n_b, dim1 * dim2)
-    x = nn.functional.softmax(x, dim=-1)
-    return x.view(n_b, dim1, dim2)
-
-
 class RBF1(nn.Module):
     def __init__(self, cell: float = 5.0, n_kernel: int = 20) -> None:
         """
@@ -137,27 +123,21 @@ class Distance(nn.Module):
         super().__init__()
 
     def forward(
-        self, r: Tensor, batch_mask: Tensor, loop_mask: Tensor, return_d0: bool = False
-    ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        self, r: Tensor, batch_mask: Tensor, loop_mask: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         """
         :param r: nuclear coordinates;  shape: (1, n_b * n_a, 3)
         :param batch_mask: batch mask;  shape: (1, n_b * n_a, n_b * n_a, 1)
         :param loop_mask: loop mask;    shape: (1, n_b * n_a, n_a)
-        :param return_d0: whether to return the original distance matrix
         :return: d, d_vec;              shape: (1, n_b * n_a, n_a - 1), (1, n_b * n_a, n_a - 1, 3)
-                 d0;                    shape: (1, n_b * n_a, n_a)
         """
         n_b, n_a, _ = r.shape
         d_vec = r.unsqueeze(dim=-2) - r.unsqueeze(dim=-3)
         d_vec = d_vec * batch_mask
-        if return_d0:
-            d0 = torch.linalg.norm(d_vec, 2, -1)
         # remove 0 vectors
         d_vec = d_vec[loop_mask].view(n_b, n_a, n_a - 1, 3)
         d = torch.linalg.norm(d_vec, 2, -1)
-        if return_d0:
-            return d, d_vec, d0
-        return d, d_vec, None
+        return d, d_vec
 
 
 class Sphere(nn.Module):
@@ -267,65 +247,47 @@ class CFConv(nn.Module):
 
 class NonLoacalInteraction(nn.Module):
     def __init__(
-        self, n_feature: int = 128, num_head: int = 1, activation: str = "softmax"
+        self, n_feature: int = 128, num_head: int = 1, temperature_coeff: float = 2.0
     ) -> None:
         """
         NonLoacalInteraction block (single/multi-head self-attention).
 
         :param n_feature: number of feature dimension
         :param num_head: number of attention head
-        :param activation: activation function type
+        :param temperature_coeff: temperature coefficient
         """
         super().__init__()
         assert (
             num_head > 0 and n_feature % num_head == 0
         ), f"Cannot split {num_head} attention heads when feature is {n_feature}."
-        activate_funs = {
-            "swish": nn.SiLU(),
-            "softplus": nn.Softplus(),
-            "softmax": nn.Softmax(dim=-1),
-            "softmax2d": softmax2d,
-        }
-        assert activation.lower() in activate_funs.keys()
-        self.temp = (
-            (2 * n_feature) ** 0.5
-            if "softmax" in activation.lower()
-            else n_feature**0.5
-        )  # define attention temperature
+        self.d = n_feature // num_head  # head dimension
+        self.nh = num_head  # number of heads
+        self.tp = (temperature_coeff * self.d) ** 0.5  # attention temperature
         self.multi = num_head > 1
         self.q = nn.Linear(in_features=n_feature, out_features=n_feature, bias=True)
         self.k = nn.Linear(in_features=n_feature, out_features=n_feature, bias=True)
         self.v = nn.Linear(in_features=n_feature, out_features=n_feature, bias=True)
-        if self.multi:
-            self.activate = nn.MultiheadAttention(
-                embed_dim=128, num_heads=num_head, batch_first=True
-            )
-        else:
-            self.activate = activate_funs[activation.lower()]
+        self.activate = nn.Softmax(dim=-1)
 
     def forward(
         self, x: Tensor, batch_mask: Tensor, return_attn_matrix: bool = False
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """
         :param x: input tensor;            shape: (1, n_b * n_a, n_f)
-        :param batch_mask: batch mask;     shape: (1, n_b * n_a, n_b * n_a)
+        :param batch_mask: batch mask;     shape: (n_b * n_a, n_b * n_a)
         :param return_attn_matrix: whether to return the attenton matrix
         :return: attention-scored output;  shape: (1, n_b * n_a, n_f)
                  attention matrix;         shape: (1, n_b * n_a, n_a)
         """
-        query = self.q(x)
-        key = self.k(x)
-        value = self.v(x)
-        if self.multi:
-            out, alpha = self.activate(
-                query, key, value, attn_mask=batch_mask.squeeze(dim=0)
-            )
-        else:
-            a = query @ key.transpose(-2, -1) / self.temp
-            alpha = self.activate(a.masked_fill(batch_mask, -torch.inf))
-            out = alpha @ value
+        _, n_a, n_f = x.shape
+        q = self.q(x).view(1, n_a, self.nh, self.d).permute(2, 0, 1, 3).contiguous()
+        k_t = self.k(x).view(1, n_a, self.nh, self.d).permute(2, 0, 3, 1).contiguous()
+        v = self.v(x).view(1, n_a, self.nh, self.d).permute(2, 0, 1, 3).contiguous()
+        a = q @ k_t / self.tp
+        alpha = self.activate(a.masked_fill(batch_mask, -torch.inf))
+        out = (alpha @ v).permute(1, 2, 0, 3).contiguous().view(1, n_a, n_f)
         if return_attn_matrix:
-            return out, alpha
+            return out, alpha.mean(dim=0)
         return out, None
 
 
@@ -335,7 +297,7 @@ class Interaction(nn.Module):
         n_feature: int = 128,
         n_kernel: int = 20,
         num_head: int = 1,
-        attention_activation: str = "softmax",
+        temperature_coeff: float = 2.0,
     ) -> None:
         """
         Interaction block.
@@ -343,17 +305,13 @@ class Interaction(nn.Module):
         :param n_feature: number of feature dimension
         :param n_kernel: number of RBF kernels
         :param num_head: number of attention head
-        :param attention_activation: attention activation function type
+        :param temperature_coeff: temperature coefficient
         """
         super().__init__()
         self.n_feature = n_feature
         self.cfconv = CFConv(n_kernel=n_kernel, n_feature=n_feature)
-        self.nonloacl = (
-            NonLoacalInteraction(
-                n_feature=n_feature, num_head=num_head, activation=attention_activation
-            )
-            if num_head > 0
-            else lambda _, __, ___: (0, None)
+        self.nonloacl = NonLoacalInteraction(
+            n_feature=n_feature, num_head=num_head, temperature_coeff=temperature_coeff
         )
         self.u = nn.Linear(
             in_features=n_feature, out_features=n_feature * 3, bias=False
@@ -381,7 +339,7 @@ class Interaction(nn.Module):
         :param d_vec_norm: normalised d_vec;  shape: (1, n_b * n_a, n_a - 1, 3, 1)
         :param mask: neighbour mask;          shape: (1, n_b * n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;     shape: (1, n_b * n_a, n_a)
-        :param batch_mask: batch mask;        shape: (1, n_b * n_a, n_b * n_a)
+        :param batch_mask: batch mask;        shape: (n_b * n_a, n_b * n_a)
         :param return_attn_matrix: whether to return the attenton matrix
         :return: new scale & output scale & vector info & attention matrix
         """

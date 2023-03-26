@@ -25,7 +25,7 @@ class CMRET(nn.Module):
         n_interaction: int = 6,
         rbf_type: str = "gaussian",
         num_head: int = 1,
-        attention_activation: str = "softmax",
+        temperature_coeff: float = 2.0,
         dy: bool = True,
     ) -> None:
         """
@@ -39,7 +39,7 @@ class CMRET(nn.Module):
         :param rbf_type: type of rbf basis: 'bessel', 'gaussian' or 'spherical'
                          choosing 'spherical' to allow higher order MP (L = 3)
         :param num_head: number of attention head per layer
-        :param attention_activation: attention activation function type
+        :param temperature_coeff: temperature coefficient
         :param dy: whether calculater -dy
         """
         super().__init__()
@@ -62,7 +62,7 @@ class CMRET(nn.Module):
                     n_feature=n_atom_basis,
                     n_kernel=n_kernel,
                     num_head=num_head,
-                    attention_activation=attention_activation,
+                    temperature_coeff=temperature_coeff,
                 )
                 for _ in range(n_interaction)
             ]
@@ -73,7 +73,6 @@ class CMRET(nn.Module):
     def forward(
         self,
         mol: Dict[str, Tensor],
-        return_adjacency_matrix: bool = False,
         return_attn_matrix: bool = False,
         average_attn_matrix_over_layers: bool = True,
     ) -> Dict[str, Tensor]:
@@ -85,7 +84,6 @@ class CMRET(nn.Module):
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }
-        :param return_adjacency_matrix: whether to return the adjacency matrix
         :param return_attn_matrix: whether to return the attention matrices
         :param average_attn_matrix_over_layers: whether to average the attention matrices over layers
         :return: molecular properties (e.g. energy, atomic forces, dipole moment)
@@ -118,14 +116,12 @@ class CMRET(nn.Module):
         batch_mask = batch_mask_[None, :, :, None]
         batch_mask_ = batch_mask_ == 0
         # ------------------------------------------------------------------------
-        d, d_vec, d0 = self.distance(r, batch_mask, loop_mask, return_adjacency_matrix)
+        d, d_vec = self.distance(r, batch_mask, loop_mask)
         cutoff, mask = self.cutoff(d)
         cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
         h = batch_mask.shape[1]
         cutoff_mask = batch_mask[loop_mask].view(1, h, h - 1, 1)
         cutoff, mask = cutoff * cutoff_mask, mask * cutoff_mask
-        if return_adjacency_matrix:
-            adj, _ = self.cutoff(d0)
         e = self.rbf(d=d, d_vec=d_vec)
         if e.dim() == 4:
             e = cutoff * e
@@ -145,8 +141,6 @@ class CMRET(nn.Module):
                     attn.append(_attn)
         o = self.norm(o)
         out = self.out(z=z, s=o, v=v, r=r, batch=batch)
-        if return_adjacency_matrix:
-            out["adj_matrix"] = adj * batch_mask.squeeze(dim=-1)
         if return_attn_matrix:
             if average_attn_matrix_over_layers:
                 attn = torch.cat(attn, dim=0).mean(dim=0)
@@ -164,7 +158,7 @@ class CMRETModel(nn.Module):
         n_output: int = 2,
         rbf_type: str = "gaussian",
         num_head: int = 1,
-        attention_activation: str = "softmax",
+        temperature_coeff: float = 2.0,
         output_mode: str = "energy-force",
     ) -> None:
         """
@@ -178,7 +172,7 @@ class CMRETModel(nn.Module):
         :param rbf_type: type of rbf basis: 'bessel', 'gaussian' or 'spherical'
                          choosing 'spherical' to allow higher order MP (L = 3)
         :param num_head: number of attention head per layer
-        :param attention_activation: attention activation function type
+        :param temperature_coeff: temperature coefficient
         :param output_mode: output properties
         """
         super().__init__()
@@ -208,14 +202,13 @@ class CMRETModel(nn.Module):
             n_interaction=n_interaction,
             rbf_type=rbf_type,
             num_head=num_head,
-            attention_activation=attention_activation,
+            temperature_coeff=temperature_coeff,
             dy=dy,
         )
 
     def forward(
         self,
         mol: Dict[str, Tensor],
-        return_adjacency_matrix: bool = False,
         return_attn_matrix: bool = False,
         average_attn_matrix_over_layers: bool = True,
     ) -> Dict[str, Tensor]:
@@ -223,19 +216,16 @@ class CMRETModel(nn.Module):
         :param mol: molecule = {
             "Z": nuclear charges tensor;      shape: (1, n_b * n_a)
             "R": nuclear coordinates tensor;  shape: (1, n_b * n_a, 3)
-            "batch": batch indices;           shape: (1, n_b * n_a)
-            "mask": batch mask;               shape: (n_b, n_b * n_a, 1)
+            "batch": batch mask;              shape: (n_b, n_b * n_a, 1)
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }
-        :param return_adjacency_matrix: whether to return the adjacency matrix
         :param return_attn_matrix: whether to return the attention matrices
         :param average_attn_matrix_over_layers: whether to average the attention matrices over layers
         :return: molecular properties (e.g. energy, atomic forces, dipole moment)
         """
         return self.model(
             mol,
-            return_adjacency_matrix,
             return_attn_matrix,
             average_attn_matrix_over_layers,
         )
