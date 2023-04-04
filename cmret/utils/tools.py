@@ -214,7 +214,7 @@ def train(
     train_size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device=device).train()
-    optimizer = op.AdamW(model.parameters(), lr=1e-8, weight_decay=0.01)
+    optimizer = op.Adam(model.parameters(), lr=1e-8)
     scheduler = _TwoCycleLR(optimizer=optimizer, total_steps=max_n_epochs * train_size)
     logging.info(f"using hardware {str(device).upper()}")
     logging.debug(f"{model.check_parameter_number} trainable parameters")

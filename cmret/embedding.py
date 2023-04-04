@@ -146,8 +146,8 @@ class Embedding(nn.Module):
 
     def forward(self, z: Tensor) -> Tensor:
         """
-        :param z: nuclear charges;  shape: (n_b, n_a)
-        :return: embedded tensor;   shape: (n_b, n_a, embedding_dim)
+        :param z: nuclear charges;  shape: (1, n_a)
+        :return: embedded tensor;   shape: (1, n_a, embedding_dim)
         """
         return self.out(electron_config.to(device=z.device)[z])
 

@@ -50,6 +50,6 @@ molecules = carbene.molecule
 	title={Comprehensive Molecular Representation from Equivariant Transformer},
 	author={Tao, Nianze and Morimoto, Hiromi and Leoni, Stefano},
 	journal={arXiv preprint arXiv:},
-	year={2022}
+	year={2023}
 }
 ```

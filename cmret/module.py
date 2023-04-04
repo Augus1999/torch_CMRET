@@ -24,8 +24,8 @@ class RBF1(nn.Module):
 
     def forward(self, **kargv: Tensor) -> Tensor:
         """
-        :param d: a tensor of distances;  shape: (1, n_b * n_a, n_a - 1)
-        :return: RBF-extanded distances;  shape: (1, n_b * n_a, n_a - 1, n_k)
+        :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
+        :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
         """
         d = kargv["d"]
         out = (
@@ -54,8 +54,8 @@ class RBF2(nn.Module):
 
     def forward(self, **kargv: Tensor) -> Tensor:
         """
-        :param d: a tensor of distances;  shape: (1, n_b * n_a, n_a - 1)
-        :return: RBF-extanded distances;  shape: (1, n_b * n_a, n_a - 1, n_k)
+        :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
+        :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
         """
         d = kargv["d"]
         out = (-self.coeff * ((-d.unsqueeze(dim=-1)).exp() - self.offsets).pow(2)).exp()
@@ -78,9 +78,9 @@ class RBF3(nn.Module):
 
     def forward(self, **kargv: Tensor) -> Tensor:
         """
-        :param d: a tensor of distances;  shape: (1, n_b * n_a, n_a - 1)
-        :param d_vec: pair-wise vector;   shape: (1, n_b * n_a, n_a - 1, 3)
-        :return: RBF-extanded distances;  shape: (1, n_b * n_a, n_a - 1, 3, n_k)
+        :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
+        :param d_vec: pair-wise vector;   shape: (1, n_a, n_a - 1, 3)
+        :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, 3, n_k)
         """
         d, d_vec = kargv["d"], kargv["d_vec"]
         d_e = self.radial(d=d).unsqueeze(dim=-2)
@@ -106,8 +106,8 @@ class CosinCutOff(nn.Module):
 
     def forward(self, d: Tensor) -> Tuple[Tensor]:
         """
-        :param d: pair-wise distances;     shape: (1, n_b * n_a, n_a - 1)
-        :return: cutoff & neighbour mask;  shape: (1, n_b * n_a, n_a - 1)
+        :param d: pair-wise distances;     shape: (1, n_a, n_a - 1)
+        :return: cutoff & neighbour mask;  shape: (1, n_a, n_a - 1)
         """
         cutoff = 0.5 * (torch.pi * d / self.cutoff).cos() + 0.5
         mask = (d <= self.cutoff).float()
@@ -126,10 +126,10 @@ class Distance(nn.Module):
         self, r: Tensor, batch_mask: Tensor, loop_mask: Tensor
     ) -> Tuple[Tensor, Tensor]:
         """
-        :param r: nuclear coordinates;  shape: (1, n_b * n_a, 3)
-        :param batch_mask: batch mask;  shape: (1, n_b * n_a, n_b * n_a, 1)
-        :param loop_mask: loop mask;    shape: (1, n_b * n_a, n_a)
-        :return: d, d_vec;              shape: (1, n_b * n_a, n_a - 1), (1, n_b * n_a, n_a - 1, 3)
+        :param r: nuclear coordinates;  shape: (1, n_a, 3)
+        :param batch_mask: batch mask;  shape: (1, n_a, n_a, 1)
+        :param loop_mask: loop mask;    shape: (1, n_a, n_a)
+        :return: d, d_vec;              shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3)
         """
         n_b, n_a, _ = r.shape
         d_vec = r.unsqueeze(dim=-2) - r.unsqueeze(dim=-3)
@@ -149,8 +149,8 @@ class Sphere(nn.Module):
 
     def forward(self, d_vec: Tensor) -> Tensor:
         """
-        :param d_vec: vectors;  shape: (1, n_b * n_a, n_a - 1, 3)
-        :return: theta values;  shape: (1, n_b * n_a, n_a - 1)
+        :param d_vec: vectors;  shape: (1, n_a, n_a - 1, 3)
+        :return: theta values;  shape: (1, n_a, n_a - 1)
         """
         theta = torch.atan2(d_vec[..., 1], d_vec[..., 0])
         return theta
@@ -216,19 +216,19 @@ class CFConv(nn.Module):
         self, x: Tensor, e: Tensor, mask: Tensor, loop_mask: Tensor
     ) -> Tuple[Tensor]:
         """
-        :param x: input info;              shape: (1, n_b * n_a, n_f)
-        :param e: extended tensor;         shape: (1, n_b * n_a, n_a - 1, n_k)
-                                               or (1, n_b * n_a, n_a - 1, 3, n_k)
-        :param mask: neighbour mask;       shape: (1, n_b * n_a, n_a - 1, 1)
-        :param loop_mask: self-loop mask;  shape: (1, n_b * n_a, n_a)
-        :return: convoluted info;          shape: (1, n_b * n_a, n_a - 1, n_f) * 3
-                                               or (1, n_b * n_a, n_a - 1, 3, n_f) * 3
+        :param x: input info;              shape: (1, n_a, n_f)
+        :param e: extended tensor;         shape: (1, n_a, n_a - 1, n_k)
+                                               or (1, n_a, n_a - 1, 3, n_k)
+        :param mask: neighbour mask;       shape: (1, n_a, n_a - 1, 1)
+        :param loop_mask: self-loop mask;  shape: (1, n_a, n_a)
+        :return: convoluted info;          shape: (1, n_a, n_a - 1, n_f) * 3
+                                               or (1, n_a, n_a - 1, 3, n_f) * 3
         """
         w1, w2 = self.w1(e), self.w2(e)
         x = self.phi(x)
-        n_b, n_a, f = x.shape
+        _, n_a, f = x.shape
         x_nbs = x.unsqueeze(dim=-3).repeat(1, n_a, 1, 1)
-        x_nbs = x_nbs[loop_mask].view(n_b, n_a, n_a - 1, f)
+        x_nbs = x_nbs[loop_mask].view(1, n_a, n_a - 1, f)
         if e.dim() == 4:
             v1 = x.unsqueeze(dim=-2) * w1 * mask
             v2 = x_nbs * w2 * mask
@@ -247,7 +247,7 @@ class CFConv(nn.Module):
 
 class NonLoacalInteraction(nn.Module):
     def __init__(
-        self, n_feature: int = 128, num_head: int = 1, temperature_coeff: float = 2.0
+        self, n_feature: int = 128, num_head: int = 4, temperature_coeff: float = 2.0
     ) -> None:
         """
         NonLoacalInteraction block (single/multi-head self-attention).
@@ -273,11 +273,11 @@ class NonLoacalInteraction(nn.Module):
         self, x: Tensor, batch_mask: Tensor, return_attn_matrix: bool = False
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """
-        :param x: input tensor;            shape: (1, n_b * n_a, n_f)
-        :param batch_mask: batch mask;     shape: (n_b * n_a, n_b * n_a)
+        :param x: input tensor;            shape: (1, n_a, n_f)
+        :param batch_mask: batch mask;     shape: (n_a, n_a)
         :param return_attn_matrix: whether to return the attenton matrix
-        :return: attention-scored output;  shape: (1, n_b * n_a, n_f)
-                 attention matrix;         shape: (1, n_b * n_a, n_a)
+        :return: attention-scored output;  shape: (1, n_a, n_f)
+                 attention matrix;         shape: (1, n_a, n_a)
         """
         _, n_a, n_f = x.shape
         q = self.q(x).view(1, n_a, self.nh, self.d).permute(2, 0, 1, 3).contiguous()
@@ -332,14 +332,14 @@ class Interaction(nn.Module):
         return_attn_matrix: bool = False,
     ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]:
         """
-        :param s: scale info;                 shape: (1, n_b * n_a, n_f)
-        :param o: scale from pervious layer;  shape: (1, n_b * n_a, n_f)
-        :param v: vector info;                shape: (1, n_b * n_a, 3, n_f)
-        :param e: rbf extended distances;     shape: (1, n_b * n_a, n_a - 1, n_k)
-        :param d_vec_norm: normalised d_vec;  shape: (1, n_b * n_a, n_a - 1, 3, 1)
-        :param mask: neighbour mask;          shape: (1, n_b * n_a, n_a - 1, 1)
-        :param loop_mask: self-loop mask;     shape: (1, n_b * n_a, n_a)
-        :param batch_mask: batch mask;        shape: (n_b * n_a, n_b * n_a)
+        :param s: scale info;                 shape: (1, n_a, n_f)
+        :param o: scale from pervious layer;  shape: (1, n_a, n_f)
+        :param v: vector info;                shape: (1, n_a, 3, n_f)
+        :param e: rbf extended distances;     shape: (1, n_a, n_a - 1, n_k)
+        :param d_vec_norm: normalised d_vec;  shape: (1, n_a, n_a - 1, 3, 1)
+        :param mask: neighbour mask;          shape: (1, n_a, n_a - 1, 1)
+        :param loop_mask: self-loop mask;     shape: (1, n_a, n_a)
+        :param batch_mask: batch mask;        shape: (n_a, n_a)
         :param return_attn_matrix: whether to return the attenton matrix
         :return: new scale & output scale & vector info & attention matrix
         """
@@ -387,8 +387,8 @@ class GatedEquivariant(nn.Module):
 
     def forward(self, s: Tensor, v: Tensor) -> Tuple[Tensor]:
         """
-        :param s: scale info;   shape: (1, n_b * n_a, n_f)
-        :param v: vector info;  shape: (1, n_b * n_a, 3, n_f)
+        :param s: scale info;   shape: (1, n_a, n_f)
+        :param v: vector info;  shape: (1, n_a, 3, n_f)
         :return: updated s, updated v
         """
         v1, v2 = self.u(v), self.v(v)

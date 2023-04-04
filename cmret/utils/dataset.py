@@ -57,16 +57,15 @@ class ASEData(data.Dataset):
         d = self.data[idx]
         charges = torch.tensor(d.numbers, dtype=torch.long)
         positions = torch.tensor(d.positions, dtype=torch.float32)
-        forces = torch.tensor(d.data.F, dtype=torch.float32)
         energy = torch.tensor(d.data.E, dtype=torch.float32)
         mol = {"Z": charges, "R": positions}
+        label = {"E": energy}
         if "S" in d.data:
-            spin = torch.tensor(d.data.S, dtype=torch.float32)
-            mol["S"] = spin
+            mol["S"] = torch.tensor(d.data.S, dtype=torch.float32)
         if "Q" in d.data:
-            charge = torch.tensor(d.data.Q, dtype=torch.float32)
-            mol["Q"] = charge
-        label = {"E": energy, "F": forces}
+            mol["Q"] = torch.tensor(d.data.Q, dtype=torch.float32)
+        if "F" in d.data:
+            label["F"] = torch.tensor(d.data.F, dtype=torch.float32)
         return {"mol": mol, "label": label}
 
 

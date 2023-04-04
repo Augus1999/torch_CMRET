@@ -24,7 +24,7 @@ class CMRET(nn.Module):
         n_atom_basis: int = 128,
         n_interaction: int = 6,
         rbf_type: str = "gaussian",
-        num_head: int = 1,
+        num_head: int = 4,
         temperature_coeff: float = 2.0,
         dy: bool = True,
     ) -> None:
@@ -78,9 +78,9 @@ class CMRET(nn.Module):
     ) -> Dict[str, Tensor]:
         """
         :param mol: molecule = {
-            "Z": nuclear charges tensor;      shape: (1, n_b * n_a)
-            "R": nuclear coordinates tensor;  shape: (1, n_b * n_a, 3)
-            "batch": batch mask;              shape: (n_b, n_b * n_a, 1)
+            "Z": nuclear charges tensor;      shape: (1, n_a)
+            "R": nuclear coordinates tensor;  shape: (1, n_a, 3)
+            "batch": batch mask;              shape: (n_b, n_a, 1)
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }
@@ -93,7 +93,7 @@ class CMRET(nn.Module):
         v = torch.zeros_like(r).unsqueeze(dim=-1).repeat(1, 1, 1, self.n)
         if "Q" in mol:
             q_info = mol["Q"]
-            z_info = z.repeat(s_info.shape[0], 1) * batch.squeeze(dim=-1)
+            z_info = z.repeat(q_info.shape[0], 1) * batch.squeeze(dim=-1)
             q_info = q_info / z_info.sum(dim=-1, keepdim=True)
             v_ = v.repeat(q_info.shape[0], 1, 1, 1) * batch.unsqueeze(dim=-1)
             v_ = v_ - q_info[:, :, None, None]
@@ -107,7 +107,7 @@ class CMRET(nn.Module):
             v = v_[batch.squeeze(-1) != 0].view(v.shape)
         # --------- compute loop mask that removes the self-loop ----------------
         loop_mask = torch.eye(z.shape[-1], device=z.device)
-        loop_mask = loop_mask[None, :, :].repeat(z.shape[0], 1, 1) == 0
+        loop_mask = loop_mask[None, :, :] == 0
         # -----------------------------------------------------------------------
         s = self.embedding(z)
         o = torch.zeros_like(s)
@@ -157,7 +157,7 @@ class CMRETModel(nn.Module):
         n_interaction: int = 6,
         n_output: int = 2,
         rbf_type: str = "gaussian",
-        num_head: int = 1,
+        num_head: int = 4,
         temperature_coeff: float = 2.0,
         output_mode: str = "energy-force",
     ) -> None:
@@ -214,9 +214,9 @@ class CMRETModel(nn.Module):
     ) -> Dict[str, Tensor]:
         """
         :param mol: molecule = {
-            "Z": nuclear charges tensor;      shape: (1, n_b * n_a)
-            "R": nuclear coordinates tensor;  shape: (1, n_b * n_a, 3)
-            "batch": batch mask;              shape: (n_b, n_b * n_a, 1)
+            "Z": nuclear charges tensor;      shape: (1, n_a)
+            "R": nuclear coordinates tensor;  shape: (1, n_a, 3)
+            "batch": batch mask;              shape: (n_b, n_a, 1)
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }

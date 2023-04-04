@@ -8,6 +8,7 @@ import torch
 
 pretrain = Path(__file__).parent
 names = {
+    "dimer": pretrain / "des370k.h5",
     "carbene": pretrain / "carbene.h5",
     "ethanol": pretrain / "ethanol.h5",
     "benzene": pretrain / "benzene.h5",
