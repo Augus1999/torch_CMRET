@@ -20,7 +20,7 @@ class CMRET(nn.Module):
         self,
         output: nn.Module,
         cutoff: float = 5.0,
-        n_kernel: int = 20,
+        n_kernel: int = 50,
         n_atom_basis: int = 128,
         n_interaction: int = 6,
         rbf_type: str = "gaussian",
@@ -132,7 +132,15 @@ class CMRET(nn.Module):
         attn = []
         for layer in self.interaction:
             s, o, v, _attn = layer(
-                s, o, v, e, d_vec_norm, mask, loop_mask, batch_mask_, return_attn_matrix
+                s=s,
+                o=o,
+                v=v,
+                e=e,
+                d_vec_norm=d_vec_norm,
+                mask=cutoff,
+                loop_mask=loop_mask,
+                batch_mask=batch_mask_,
+                return_attn_matrix=return_attn_matrix,
             )
             if return_attn_matrix:
                 if average_attn_matrix_over_layers:
@@ -152,7 +160,7 @@ class CMRETModel(nn.Module):
     def __init__(
         self,
         cutoff: float = 5.0,
-        n_kernel: int = 20,
+        n_kernel: int = 50,
         n_atom_basis: int = 128,
         n_interaction: int = 6,
         n_output: int = 2,

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. TAO (Omozawa SUENO)
 """
-DataSets classes
+DataSets classes.
+
 The item returned from these classes is a python 
 dictionary: {"mol": mol_dict, "label": label_dict},
 where mol_dict is a dictionary as {
@@ -82,9 +83,7 @@ class XYZData(data.Dataset):
         :param limit: item limit
         """
         super().__init__()
-        self.data = read(file, index=":")
-        if limit:
-            self.data = self.data[:limit]
+        self.data = read(file, index=f":{limit if limit else ''}")
 
     def __len__(self):
         return len(self.data)

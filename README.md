@@ -46,7 +46,7 @@ molecules = carbene.molecule
 
 ## Cite
 ```bibtex
-@article{tao2022cmret,
+@article{tao2023cmret,
 	title={Comprehensive Molecular Representation from Equivariant Transformer},
 	author={Tao, Nianze and Morimoto, Hiromi and Leoni, Stefano},
 	journal={arXiv preprint arXiv:},

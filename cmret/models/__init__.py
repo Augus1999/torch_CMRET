@@ -8,10 +8,10 @@ import torch
 
 pretrain = Path(__file__).parent
 names = {
+    "md17": pretrain / "md17.h5",
+    "iso17": pretrain / "iso17.h5",
     "dimer": pretrain / "des370k.h5",
     "carbene": pretrain / "carbene.h5",
-    "ethanol": pretrain / "ethanol.h5",
-    "benzene": pretrain / "benzene.h5",
 }
 
 
