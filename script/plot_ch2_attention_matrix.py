@@ -20,8 +20,7 @@ for i in range(len(r3s)):
     mol = {
         "Z": Z,
         "R": R,
-        "batch": torch.ones_like(Z),
-        "mask": torch.ones_like(Z)[:, :, None],
+        "batch": torch.ones_like(Z)[:, :, None],
     }
     out = model(mol, return_attn_matrix=True, average_attn_matrix_over_layers=False)
     alphas = out["attn_matrix"]
