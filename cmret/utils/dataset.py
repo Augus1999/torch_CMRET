@@ -60,13 +60,13 @@ class ASEData(data.Dataset):
         positions = torch.tensor(d.positions, dtype=torch.float32)
         energy = torch.tensor(d.data.E, dtype=torch.float32)
         mol = {"Z": charges, "R": positions}
-        label = {"E": energy}
+        label = {"scalar": energy}
         if "S" in d.data:
             mol["S"] = torch.tensor(d.data.S, dtype=torch.float32)
         if "Q" in d.data:
             mol["Q"] = torch.tensor(d.data.Q, dtype=torch.float32)
         if "F" in d.data:
-            label["F"] = torch.tensor(d.data.F, dtype=torch.float32)
+            label["Fvector"] = torch.tensor(d.data.F, dtype=torch.float32)
         return {"mol": mol, "label": label}
 
 
@@ -97,7 +97,7 @@ class XYZData(data.Dataset):
         forces = torch.tensor(d.get_forces(), dtype=torch.float32)
         energy = torch.tensor([d.get_total_energy()], dtype=torch.float32)
         mol = {"Z": charges, "R": positions}
-        label = {"E": energy, "F": forces}
+        label = {"scalar": energy, "vector": forces}
         return {"mol": mol, "label": label}
 
 

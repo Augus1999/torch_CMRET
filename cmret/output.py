@@ -41,7 +41,7 @@ class EquivarientScalar(nn.Module):
             s, v = layer(s, v)
         s = self.out(s)
         y = (s.repeat(batch_mask.shape[0], 1, 1) * batch_mask).sum(dim=-2)
-        out = {"energy": y}
+        out = {"scalar": y}
         if self.dy:
             dy = grad(
                 outputs=y,
@@ -50,7 +50,7 @@ class EquivarientScalar(nn.Module):
                 retain_graph=self.training,
                 create_graph=self.training,
             )[0]
-            out["force"] = -dy
+            out["vector"] = -dy
         if self.return_v:
             out["v"] = v
         return out
@@ -68,15 +68,42 @@ class EquivariantDipoleMoment(nn.Module):
         self.block = nn.ModuleList(
             [GatedEquivariant(n_feature=n_feature) for _ in range(n_output)]
         )
+        self.s = nn.Linear(in_features=n_feature, out_features=1, bias=False)
+        self.v = nn.Linear(in_features=n_feature, out_features=1, bias=False)
 
     def forward(self, **kargv: Tensor) -> Dict[str, Tensor]:
         z, s, v, r = kargv["z"], kargv["s"], kargv["v"], kargv["r"]
         batch_mask = kargv["batch"]
         r = r.repeat(batch_mask.shape[0], 1, 1) * batch_mask
-        z = z.repeat(batch_mask.shape[0], 1, 1) * batch_mask
-        mass_centre = (z.unsqueeze(dim=-1) * r) / z.sum(dim=-1)[:, None, None]
+        z = z.unsqueeze(dim=-1).repeat(batch_mask.shape[0], 1, 1) * batch_mask
+        mass_centre = (z * r) / z.sum(dim=-2, keepdim=True)
         for layer in self.block:
             s, v = layer(s, v)
-        mu = (v + s.unsequeeze(dim=-2) * (r - mass_centre).unsqueeze(dim=-1)).sum(dim=1)
+        s, v = self.s(s), self.v(v).squeeze(dim=-1)
+        mu = (v + s * (r - mass_centre)).sum(dim=1, keepdim=True)
         mu = torch.linalg.norm(mu, 2, -2)
-        return {"dipole moment": mu}
+        return {"scalar": mu}
+
+
+class ElectronicSpatial(nn.Module):
+    def __init__(self, n_feature: int = 128, n_output: int = 2) -> None:
+        """
+        Electronic spatial output block.
+
+        :param n_feature: input feature
+        :param n_output: number of output layers
+        """
+        super().__init__()
+        self.block = nn.ModuleList(
+            [GatedEquivariant(n_feature=n_feature) for _ in range(n_output)]
+        )
+        self.s = nn.Linear(in_features=n_feature, out_features=1, bias=False)
+
+    def forward(self, **kargv: Tensor) -> Dict[str, Tensor]:
+        s, v, r, batch_mask = kargv["s"], kargv["v"], kargv["r"], kargv["batch"]
+        for layer in self.block:
+            s, v = layer(s, v)
+        s = self.s(s)
+        y = s.repeat(batch_mask.shape[0], 1, 1) * batch_mask
+        y = (y * r.pow(2).sum(dim=-1, keepdim=True)).sum(dim=-2)
+        return {"scalar": y}

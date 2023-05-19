@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from .embedding import Embedding
-from .output import EquivariantDipoleMoment, EquivarientScalar
+from .output import EquivariantDipoleMoment, EquivarientScalar, ElectronicSpatial
 from .module import Interaction, Distance, CosinCutOff, RBF1, RBF2, RBF3
 
 
@@ -113,22 +113,21 @@ class CMRET(nn.Module):
         o = torch.zeros_like(s)
         # ---- compute batch mask that seperates atoms in different molecules ----
         batch_mask_ = batch.squeeze(-1).transpose(-2, -1) @ batch.squeeze(-1)
-        batch_mask = batch_mask_[None, :, :, None]
-        batch_mask_ = batch_mask_ == 0
+        batch_mask = batch_mask_[None, :, :, None]  # shape: (1, n_a, n_a, 1)
+        batch_mask_ = batch_mask_ == 0  # shape: (n_a, n_a)
         # ------------------------------------------------------------------------
         d, d_vec = self.distance(r, batch_mask, loop_mask)
-        cutoff, mask = self.cutoff(d)
-        cutoff, mask = cutoff.unsqueeze(dim=-1), mask.unsqueeze(dim=-1)
+        cutoff = self.cutoff(d).unsqueeze(dim=-1)
         h = batch_mask.shape[1]
-        cutoff_mask = batch_mask[loop_mask].view(1, h, h - 1, 1)
-        cutoff, mask = cutoff * cutoff_mask, mask * cutoff_mask
+        cutoff *= batch_mask[loop_mask].view(1, h, h - 1, 1)
         e = self.rbf(d=d, d_vec=d_vec)
         if e.dim() == 4:
             e = cutoff * e
         else:
             e = cutoff.unsqueeze(dim=-2) * e
-        _d = d.masked_fill(d == 0, torch.inf)
-        d_vec_norm = (mask * d_vec / _d.unsqueeze(dim=-1)).unsqueeze(dim=-1)
+        d_vec_norm = (
+            d_vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
+        ).unsqueeze(dim=-1)
         attn = []
         for layer in self.interaction:
             s, o, v, _attn = layer(
@@ -193,6 +192,8 @@ class CMRETModel(nn.Module):
             out = EquivarientScalar(n_feature=n_atom_basis, n_output=n_output, dy=False)
         elif output_mode == "dipole moment":
             out = EquivariantDipoleMoment(n_feature=n_atom_basis, n_output=n_output)
+        elif output_mode == "electronic spatial":
+            out = ElectronicSpatial(n_feature=n_atom_basis, n_output=n_output)
         elif output_mode == "pretrain":
             out = EquivarientScalar(
                 n_feature=n_atom_basis,

@@ -109,7 +109,7 @@ class Molecule:
         M = torch.tensor(atoms.get_masses() * 1e-3 / N_A, device=self.device)
         M = M[None, :]
         out = self.calculator(mol)
-        energy, forces = out["energy"], out["force"]
+        energy, forces = out["scalar"], out["vector"]
         self.energy.append(energy.item())
         self.molecule.append(atoms)
         velocity = self._init_velocity(M=M, T=temperature)
@@ -119,7 +119,7 @@ class Molecule:
             mol["R"].requires_grad = False
             mol["R"] += velocity * delta_t
             out = self.calculator(mol)
-            energy, forces = out["energy"], out["force"]
+            energy, forces = out["scalar"], out["vector"]
             acc = forces / M.unsqueeze(dim=-1) * factor * 1e10
             velocity = velocity + 0.5 * acc * delta_t * 1e10
             atoms = Atoms(

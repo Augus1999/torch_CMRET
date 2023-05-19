@@ -43,52 +43,52 @@ class _TwoCycleLR:
             self.scheduler.last_epoch = -1
 
 
-def energy_force_loss(
+def scalar_vector_loss(
     out: Dict[str, Tensor],
     label: Dict[str, Tensor],
     loss_f: Callable[[Tensor, Tensor], Tensor],
     raw: bool = False,
 ) -> Union[Tensor, Dict]:
     """
-    Claculate the energy-force loss
+    Claculate the scalar-vector loss
 
     :param out: output of model
     :param label: training set label
     :param loss_f: loss function
     :param raw: whether output raw losses
-    :return: energy-force loss
+    :return: scalar-vector loss
     """
     rho = 0.2
-    energy, forces = label["E"], label["F"]
-    out_en, out_forces = out["energy"], out["force"]
+    energy, forces = label["scalar"], label["vector"]
+    out_en, out_forces = out["scalar"], out["vector"]
     loss1 = loss_f(out_en, energy)
     loss2 = loss_f(out_forces, forces)
     if raw:
-        return {"energy": loss1, "force": loss2}
+        return {"scalar": loss1, "vector": loss2}
     loss = loss1 * rho + loss2 * (1 - rho)
     return loss
 
 
-def energy_loss(
+def scalar_loss(
     out: Dict[str, Tensor],
     label: Dict[str, Tensor],
     loss_f: Callable[[Tensor, Tensor], Tensor],
     raw: bool = False,
 ) -> Union[Tensor, Dict]:
     """
-    Claculate the energy loss
+    Claculate the scalar loss
 
     :param out: output of model
     :param label: training set label
     :param loss_f: loss function
     :param raw: whether output raw loss
-    :return: energy loss
+    :return: scalar loss
     """
-    energy = label["E"]
-    out_en = out["energy"]
+    energy = label["scalar"]
+    out_en = out["scalar"]
     loss = loss_f(out_en, energy)
     if raw:
-        return {"energy": loss}
+        return {"scalar": loss}
     return loss
 
 
@@ -129,15 +129,15 @@ def collate(batch: List) -> Dict[str, Tensor]:
     mol = [i["mol"] for i in batch]
     label = [i["label"] for i in batch]
     charges, positions, mask = [], [], []
-    energies, forces, coords = [], [], []
+    scalars, vectors, coords = [], [], []
     charge, spin = [], []
     for key, item in enumerate(mol):
         charges.append(item["Z"])
         positions.append(item["R"])
-        if "E" in label[key]:
-            energies.append(label[key]["E"].unsqueeze(dim=0))
-        if "F" in label[key]:
-            forces.append(label[key]["F"])
+        if "scalar" in label[key]:
+            scalars.append(label[key]["scalar"].unsqueeze(dim=0))
+        if "vector" in label[key]:
+            vectors.append(label[key]["vector"])
         if "R" in label[key]:
             coords.append(label[key]["R"])
         if "Q" in item:
@@ -161,10 +161,10 @@ def collate(batch: List) -> Dict[str, Tensor]:
     if spin:
         mol["S"] = torch.cat(spin, dim=0)
     label = {}
-    if energies:
-        label["E"] = torch.cat(energies, dim=0)
-    if forces:
-        label["F"] = torch.cat(forces, dim=0).unsqueeze(dim=0)
+    if scalars:
+        label["scalar"] = torch.cat(scalars, dim=0)
+    if vectors:
+        label["vector"] = torch.cat(vectors, dim=0).unsqueeze(dim=0)
     if coords:
         label["R"] = torch.cat(coords, dim=0).unsqueeze(dim=0)
     return {"mol": mol, "label": label}
@@ -175,7 +175,7 @@ def train(
     dataset: Generator,
     batch_size: int = 5,
     max_n_epochs: int = 20000,
-    loss_calculator=energy_force_loss,
+    loss_calculator=scalar_vector_loss,
     unit: str = "eV",
     load: Optional[str] = None,
     log_dir: Optional[str] = None,
@@ -273,7 +273,7 @@ def test(
     model: nn.Module,
     dataset: Generator,
     load: Optional[str] = None,
-    loss_calculator=energy_force_loss,
+    loss_calculator=scalar_vector_loss,
     metric_type: str = "MAE",
 ) -> Dict[str, float]:
     """

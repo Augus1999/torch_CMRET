@@ -6,8 +6,8 @@ Utils
 from .md import Molecule
 from .dataset import DataSet
 from .tools import (
-    energy_force_loss,
-    energy_loss,
+    scalar_vector_loss,
+    scalar_loss,
     train,
     test,
     split_data,
@@ -18,8 +18,8 @@ from .tools import (
 __all__ = [
     "Molecule",
     "DataSet",
-    "energy_force_loss",
-    "energy_loss",
+    "scalar_vector_loss",
+    "scalar_loss",
     "train",
     "test",
     "split_data",

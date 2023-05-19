@@ -30,7 +30,7 @@ class RBF1(nn.Module):
         d = kargv["d"]
         out = (
             torch.pi * self.offsets * d.unsqueeze(dim=-1) / self.cell
-        ).sin() / d.unsqueeze(dim=-1)
+        ).sin() / d.masked_fill(d == 0, torch.inf).unsqueeze(dim=-1)
         return out
 
 
@@ -104,15 +104,14 @@ class CosinCutOff(nn.Module):
         super().__init__()
         self.register_buffer("cutoff", Tensor([cutoff]))
 
-    def forward(self, d: Tensor) -> Tuple[Tensor]:
+    def forward(self, d: Tensor) -> Tensor:
         """
         :param d: pair-wise distances;     shape: (1, n_a, n_a - 1)
-        :return: cutoff & neighbour mask;  shape: (1, n_a, n_a - 1)
+        :return: cutoff mask;              shape: (1, n_a, n_a - 1)
         """
         cutoff = 0.5 * (torch.pi * d / self.cutoff).cos() + 0.5
-        mask = (d <= self.cutoff).float()
-        cutoff *= mask
-        return cutoff, mask
+        cutoff *= (d <= self.cutoff).float()
+        return cutoff
 
 
 class Distance(nn.Module):
@@ -221,7 +220,7 @@ class CFConv(nn.Module):
                                                or (1, n_a, n_a - 1, 3, n_k)
         :param mask: neighbour mask;       shape: (1, n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;  shape: (1, n_a, n_a)
-        :return: convoluted info;          shape: (1, n_a, n_a - 1, n_f) * 3
+        :return: convoluted scaler info;   shape: (1, n_a, n_a - 1, n_f) * 3
                                                or (1, n_a, n_a - 1, 3, n_f) * 3
         """
         w1, w2 = self.w1(e), self.w2(e)
@@ -295,8 +294,8 @@ class Interaction(nn.Module):
     def __init__(
         self,
         n_feature: int = 128,
-        n_kernel: int = 20,
-        num_head: int = 1,
+        n_kernel: int = 50,
+        num_head: int = 4,
         temperature_coeff: float = 2.0,
     ) -> None:
         """
@@ -392,7 +391,8 @@ class GatedEquivariant(nn.Module):
         :return: updated s, updated v
         """
         v1, v2 = self.u(v), self.v(v)
-        s0 = self.a(torch.cat([s, torch.linalg.norm(v2, 2, -2)], dim=-1))
+        # add 1e-8 to avoid nan in the gradient of gradient in some extreme cases
+        s0 = self.a(torch.cat([s, torch.linalg.norm(v2 + 1e-8, 2, -2)], dim=-1))
         sg, ss = torch.split(s0, split_size_or_sections=self.n_feature, dim=-1)
         vg = v1 * ss.unsqueeze(dim=-2)
         return sg, vg
