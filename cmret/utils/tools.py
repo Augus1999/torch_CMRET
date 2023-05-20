@@ -209,7 +209,11 @@ def train(
     )
     start_epoch: int = 0
     loader = DataLoader(
-        dataset=dataset, batch_size=batch_size, collate_fn=collate, shuffle=True
+        dataset=dataset,
+        batch_size=batch_size,
+        collate_fn=collate,
+        shuffle=True,
+        num_workers=len(os.sched_getaffinity(0)),  # num of cpu cores
     )
     train_size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

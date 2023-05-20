@@ -6,43 +6,23 @@ CMRET is an equivarient garph neural network that maps molecular geometry to its
 ![torch](https://img.shields.io/badge/torch-2.0-blue?color=708ddd)
 ![black](https://img.shields.io/badge/code%20style-black-black)
 
-## API
-### import model
-```python
-from cmret.representation import CMRETModel
-
-model = CMRETModel()
+## Requirements
+```txt
+torch>=2.0.0
+ase>=3.22.0
+clint
+requests
 ```
 
-### train the model
-```python
-from cmret.utils import train, DataSet
+## Usage
+See examples:
 
-workdir = "carbene"
-dataset = DataSet("QM.CH2", "dataset", mode="train", limit=None)
-train(model=model, dataset=dataset.data, unit=dataset.unit, work_dir=workdir)
-```
+[train and test on MD17 dataset](script/run_md17.py)
 
-### test the model
-```python
-from cmret.utils import test, DataSet
+[train and test on ISO17 dataset](script/run_iso17.py)
 
-dataset = DataSet("QM.CH2", "dataset", mode="test", limit=None)
-print(test(model=model, dataset=dataset.data, load=f"{workdir}/trained.pt"))
-```
+[running molecular dynamic simulation](script/molecular_dynamics.py)
 
-### running Molecular Dynamics
-```python
-import torch
-from cmret.utils import Molecule
-
-carbene = Molecule()
-carbene.from_file("carbene.xyz")
-carbene.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-carbene.calculator = model
-carbene.run(temperature=298, delta_t=1e-18, step=100000)
-molecules = carbene.molecule
-```
 
 ## Cite
 ```bibtex

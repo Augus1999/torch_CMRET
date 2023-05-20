@@ -11,7 +11,7 @@ where mol_dict is a dictionary as {
                                     "Q": molecular net charge (Tensor) which is optional,
                                     "S": spin state (Tensor) which is optional,
                                     }
-and label_dict is dictionary as {"E": energy (Tensor), "F": atomic forces (Tensor)}.
+and label_dict is dictionary as {"scalar": energy (Tensor), "vector": atomic forces (Tensor)}.
 """
 import os
 import glob
@@ -66,7 +66,7 @@ class ASEData(data.Dataset):
         if "Q" in d.data:
             mol["Q"] = torch.tensor(d.data.Q, dtype=torch.float32)
         if "F" in d.data:
-            label["Fvector"] = torch.tensor(d.data.F, dtype=torch.float32)
+            label["vector"] = torch.tensor(d.data.F, dtype=torch.float32)
         return {"mol": mol, "label": label}
 
 

@@ -1,0 +1,1 @@
+This folder contains python scripts that are used to train and test the model.

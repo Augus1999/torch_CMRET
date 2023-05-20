@@ -220,7 +220,7 @@ class CFConv(nn.Module):
                                                or (1, n_a, n_a - 1, 3, n_k)
         :param mask: neighbour mask;       shape: (1, n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;  shape: (1, n_a, n_a)
-        :return: convoluted scaler info;   shape: (1, n_a, n_a - 1, n_f) * 3
+        :return: convoluted scalar info;   shape: (1, n_a, n_a - 1, n_f) * 3
                                                or (1, n_a, n_a - 1, 3, n_f) * 3
         """
         w1, w2 = self.w1(e), self.w2(e)

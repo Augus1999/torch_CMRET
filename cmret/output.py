@@ -81,7 +81,7 @@ class EquivariantDipoleMoment(nn.Module):
             s, v = layer(s, v)
         s, v = self.s(s), self.v(v).squeeze(dim=-1)
         mu = (v + s * (r - mass_centre)).sum(dim=1, keepdim=True)
-        mu = torch.linalg.norm(mu, 2, -2)
+        mu = torch.linalg.norm(mu, 2, -1)
         return {"scalar": mu}
 
 
