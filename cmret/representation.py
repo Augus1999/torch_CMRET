@@ -8,7 +8,12 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from .embedding import Embedding
-from .output import EquivariantDipoleMoment, EquivarientScalar, ElectronicSpatial
+from .output import (
+    EquivariantDipoleMoment,
+    EquivarientScalar,
+    EquivariantPolarizability,
+    ElectronicSpatial,
+)
 from .module import Interaction, Distance, CosinCutOff, RBF1, RBF2, RBF3
 
 
@@ -188,10 +193,12 @@ class CMRETModel(nn.Module):
         if output_mode == "energy-force":
             out = EquivarientScalar(n_feature=n_atom_basis, n_output=n_output, dy=True)
             dy = True
-        elif output_mode in ("energy", "HOMO", "LUMO"):
+        elif output_mode == "energy":
             out = EquivarientScalar(n_feature=n_atom_basis, n_output=n_output, dy=False)
         elif output_mode == "dipole moment":
             out = EquivariantDipoleMoment(n_feature=n_atom_basis, n_output=n_output)
+        elif output_mode == "polarizability":
+            out = EquivariantPolarizability(n_feature=n_atom_basis, n_output=n_output)
         elif output_mode == "electronic spatial":
             out = ElectronicSpatial(n_feature=n_atom_basis, n_output=n_output)
         elif output_mode == "pretrain":
