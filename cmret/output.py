@@ -52,7 +52,7 @@ class EquivarientScalar(nn.Module):
             )[0]
             out["vector"] = -dy
         if self.return_v:
-            out["v"] = v
+            out["v"] = v.mean(dim=-1)
         return out
 
 

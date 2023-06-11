@@ -59,10 +59,8 @@ def scalar_vector_loss(
     :return: scalar-vector loss
     """
     rho = 0.2
-    energy, forces = label["scalar"], label["vector"]
-    out_en, out_forces = out["scalar"], out["vector"]
-    loss1 = loss_f(out_en, energy)
-    loss2 = loss_f(out_forces, forces)
+    loss1 = loss_f(out["scalar"], label["scalar"])
+    loss2 = loss_f(out["vector"], label["vector"])
     if raw:
         return {"scalar": loss1, "vector": loss2}
     loss = loss1 * rho + loss2 * (1 - rho)
@@ -84,9 +82,7 @@ def scalar_loss(
     :param raw: whether output raw loss
     :return: scalar loss
     """
-    energy = label["scalar"]
-    out_en = out["scalar"]
-    loss = loss_f(out_en, energy)
+    loss = loss_f(out["scalar"], label["scalar"])
     if raw:
         return {"scalar": loss}
     return loss
@@ -105,9 +101,7 @@ def pretrain_loss(
     :param loss_f: loss function
     :return: pre-train loss
     """
-    geometry = label["R"].flatten()
-    out_geometry = out["v"].sum(dim=-1).flatten()
-    return loss_f(out_geometry, geometry)
+    return loss_f(out["v"], label["R"])
 
 
 def collate(batch: List) -> Dict[str, Tensor]:
@@ -213,7 +207,7 @@ def train(
         batch_size=batch_size,
         collate_fn=collate,
         shuffle=True,
-        num_workers=len(os.sched_getaffinity(0)),  # num of cpu cores
+        num_workers=1,
     )
     train_size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
