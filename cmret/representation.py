@@ -14,7 +14,7 @@ from .output import (
     EquivariantPolarizability,
     ElectronicSpatial,
 )
-from .module import Interaction, Distance, CosinCutOff, RBF1, RBF2, RBF3
+from .module import Interaction, Distance, CosinCutOff, RBF1, RBF2
 
 
 __all__ = ["CMRETModel"]
@@ -41,8 +41,7 @@ class CMRET(nn.Module):
         :param n_kernel: number of RBF kernels
         :param n_atom_basis: number of atomic basis
         :param n_interaction: number of interaction blocks
-        :param rbf_type: type of rbf basis: 'bessel', 'gaussian' or 'spherical'
-                         choosing 'spherical' to allow higher order MP (L = 3)
+        :param rbf_type: type of rbf basis: 'bessel' or 'gaussian'
         :param num_head: number of attention head per layer
         :param temperature_coeff: temperature coefficient
         :param dy: whether calculater -dy
@@ -56,8 +55,6 @@ class CMRET(nn.Module):
             self.rbf = RBF1(cell=cutoff, n_kernel=n_kernel)
         elif rbf_type == "gaussian":
             self.rbf = RBF2(cell=cutoff, n_kernel=n_kernel)
-        elif rbf_type == "spherical":
-            self.rbf = RBF3(cell=cutoff, n_kernel=n_kernel)
         else:
             raise NotImplementedError
         self.cutoff = CosinCutOff(cutoff=cutoff)
@@ -95,19 +92,19 @@ class CMRET(nn.Module):
         """
         z, r, batch = mol["Z"], mol["R"], mol["batch"]
         r.requires_grad = self.dy
-        v = torch.zeros_like(r).unsqueeze(dim=-1).repeat(1, 1, 1, self.n)
+        v = torch.zeros_like(r)[:, :, :, None].repeat(1, 1, 1, self.n)
         if "Q" in mol:
             q_info = mol["Q"]
             z_info = z.repeat(q_info.shape[0], 1) * batch.squeeze(dim=-1)
             q_info = q_info / z_info.sum(dim=-1, keepdim=True)
-            v_ = v.repeat(q_info.shape[0], 1, 1, 1) * batch.unsqueeze(dim=-1)
+            v_ = v.repeat(q_info.shape[0], 1, 1, 1) * batch[:, :, :, None]
             v_ = v_ - q_info[:, :, None, None]
             v = v_[batch.squeeze(-1) != 0].view(v.shape)
         if "S" in mol:
             s_info = mol["S"]
             z_info = z.repeat(s_info.shape[0], 1) * batch.squeeze(dim=-1)
             s_info = s_info / z_info.sum(dim=-1, keepdim=True)
-            v_ = v.repeat(s_info.shape[0], 1, 1, 1) * batch.unsqueeze(dim=-1)
+            v_ = v.repeat(s_info.shape[0], 1, 1, 1) * batch[:, :, :, None]
             v_ = v_ + s_info[:, :, None, None]
             v = v_[batch.squeeze(-1) != 0].view(v.shape)
         # --------- compute loop mask that removes the self-loop ----------------
@@ -125,11 +122,7 @@ class CMRET(nn.Module):
         cutoff = self.cutoff(d).unsqueeze(dim=-1)
         h = batch_mask.shape[1]
         cutoff *= batch_mask[loop_mask].view(1, h, h - 1, 1)
-        e = self.rbf(d=d, d_vec=d_vec)
-        if e.dim() == 4:
-            e = cutoff * e
-        else:
-            e = cutoff.unsqueeze(dim=-2) * e
+        e = self.rbf(d=d, d_vec=d_vec) * cutoff
         d_vec_norm = (
             d_vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
         ).unsqueeze(dim=-1)
@@ -181,8 +174,7 @@ class CMRETModel(nn.Module):
         :param n_atom_basis: number of atomic basis
         :param n_interaction: number of interaction blocks
         :param n_output: number of output blocks
-        :param rbf_type: type of rbf basis: 'bessel', 'gaussian' or 'spherical'
-                         choosing 'spherical' to allow higher order MP (L = 3)
+        :param rbf_type: type of rbf basis: 'bessel' or 'gaussian'
         :param num_head: number of attention head per layer
         :param temperature_coeff: temperature coefficient
         :param output_mode: output properties

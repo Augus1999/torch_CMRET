@@ -76,7 +76,7 @@ class EquivariantDipoleMoment(nn.Module):
         batch_mask = kargv["batch"]
         n_b = batch_mask.shape[0]  # batch-size
         r = r.repeat(n_b, 1, 1) * batch_mask
-        z = z.unsqueeze(dim=-1).repeat(n_b, 1, 1) * batch_mask
+        z = z[:, :, None].repeat(n_b, 1, 1) * batch_mask
         centre = (z * r).sum(dim=-2, keepdim=True) / z.sum(dim=-2, keepdim=True)
         for layer in self.block:
             s, v = layer(s, v)
@@ -107,7 +107,7 @@ class EquivariantPolarizability(nn.Module):
         batch_mask = kargv["batch"]
         n_b = batch_mask.shape[0]
         r = r.repeat(n_b, 1, 1) * batch_mask
-        z = z.unsqueeze(dim=-1).repeat(n_b, 1, 1) * batch_mask
+        z = z[:, :, None].repeat(n_b, 1, 1) * batch_mask
         centre = (z * r).sum(dim=-2, keepdim=True) / z.sum(dim=-2, keepdim=True)
         for layer in self.block:
             s, v = layer(s, v)
@@ -142,7 +142,7 @@ class ElectronicSpatial(nn.Module):
         z, s, v, r = kargv["z"], kargv["s"], kargv["v"], kargv["r"]
         batch_mask = kargv["batch"]
         n_b = batch_mask.shape[0]
-        z = z.unsqueeze(dim=-1).repeat(n_b, 1, 1) * batch_mask
+        z = z[:, :, None].repeat(n_b, 1, 1) * batch_mask
         centre = (z * r).sum(dim=-2, keepdim=True) / z.sum(dim=-2, keepdim=True)
         for layer in self.block:
             s, v = layer(s, v)

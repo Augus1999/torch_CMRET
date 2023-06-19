@@ -29,8 +29,8 @@ class RBF1(nn.Module):
         """
         d = kargv["d"]
         out = (
-            torch.pi * self.offsets * d.unsqueeze(dim=-1) / self.cell
-        ).sin() / d.masked_fill(d == 0, torch.inf).unsqueeze(dim=-1)
+            torch.pi * self.offsets * d[:, :, :, None] / self.cell
+        ).sin() / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
         return out
 
 
@@ -58,40 +58,8 @@ class RBF2(nn.Module):
         :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
         """
         d = kargv["d"]
-        out = (-self.coeff * ((-d.unsqueeze(dim=-1)).exp() - self.offsets).pow(2)).exp()
+        out = (-self.coeff * ((-d[:, :, :, None]).exp() - self.offsets).pow(2)).exp()
         return out
-
-
-class RBF3(nn.Module):
-    def __init__(self, cell: float = 5.0, n_kernel: int = 20) -> None:
-        """
-        Spherical RBF kernel for 3D input.
-
-        :param cell: unit cell length
-        :param n_kernel: number of kernels
-        """
-        super().__init__()
-        self.radial = RBF2(cell=cell, n_kernel=n_kernel)
-        self.spherical = Sphere()
-        offsets = torch.linspace(1.0, 3.0, 3)
-        self.register_buffer("offsets", offsets[None, None, None, :])
-
-    def forward(self, **kargv: Tensor) -> Tensor:
-        """
-        :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
-        :param d_vec: pair-wise vector;   shape: (1, n_a, n_a - 1, 3)
-        :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, 3, n_k)
-        """
-        d, d_vec = kargv["d"], kargv["d_vec"]
-        d_e = self.radial(d=d).unsqueeze(dim=-2)
-        theta = self.spherical(d_vec)
-        theta = theta.unsqueeze(dim=-1)
-        harmonic = (
-            ((2 * self.offsets + 1) / (4 * torch.pi)).sqrt()
-            * (-theta.sin().pow(2)).pow(self.offsets)
-            * (-theta.sin() * theta.cos()).pow(self.offsets)
-        )
-        return d_e * harmonic.unsqueeze(dim=-1)
 
 
 class CosinCutOff(nn.Module):
@@ -131,28 +99,12 @@ class Distance(nn.Module):
         :return: d, d_vec;              shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3)
         """
         n_b, n_a, _ = r.shape
-        d_vec = r.unsqueeze(dim=-2) - r.unsqueeze(dim=-3)
+        d_vec = r[:, :, None, :] - r[:, None, :, :]
         d_vec = d_vec * batch_mask
         # remove 0 vectors
         d_vec = d_vec[loop_mask].view(n_b, n_a, n_a - 1, 3)
         d = torch.linalg.norm(d_vec, 2, -1)
         return d, d_vec
-
-
-class Sphere(nn.Module):
-    def __init__(self) -> None:
-        """
-        Compute spherical angles.
-        """
-        super().__init__()
-
-    def forward(self, d_vec: Tensor) -> Tensor:
-        """
-        :param d_vec: vectors;  shape: (1, n_a, n_a - 1, 3)
-        :return: theta values;  shape: (1, n_a, n_a - 1)
-        """
-        theta = torch.atan2(d_vec[..., 1], d_vec[..., 0])
-        return theta
 
 
 class ResML(nn.Module):
@@ -217,25 +169,18 @@ class CFConv(nn.Module):
         """
         :param x: input info;              shape: (1, n_a, n_f)
         :param e: extended tensor;         shape: (1, n_a, n_a - 1, n_k)
-                                               or (1, n_a, n_a - 1, 3, n_k)
         :param mask: neighbour mask;       shape: (1, n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;  shape: (1, n_a, n_a)
         :return: convoluted scalar info;   shape: (1, n_a, n_a - 1, n_f) * 3
-                                               or (1, n_a, n_a - 1, 3, n_f) * 3
         """
         w1, w2 = self.w1(e), self.w2(e)
         x = self.phi(x)
         _, n_a, f = x.shape
-        x_nbs = x.unsqueeze(dim=-3).repeat(1, n_a, 1, 1)
+        x_nbs = x[:, None, :, :].repeat(1, n_a, 1, 1)
         x_nbs = x_nbs[loop_mask].view(1, n_a, n_a - 1, f)
-        if e.dim() == 4:
-            v1 = x.unsqueeze(dim=-2) * w1 * mask
-            v2 = x_nbs * w2 * mask
-            v = self.o(torch.cat([v1, v2], dim=-1)) * mask
-        else:  # higher order L = 3
-            v1 = x[:, :, None, None, :] * w1 * mask.unsqueeze(dim=-2)
-            v2 = x_nbs.unsqueeze(dim=-2) * w2 * mask.unsqueeze(dim=-2)
-            v = self.o(torch.cat([v1, v2], dim=-1)) * mask.unsqueeze(dim=-2)
+        v1 = x[:, :, None, :] * w1 * mask
+        v2 = x_nbs * w2 * mask
+        v = self.o(torch.cat([v1, v2], dim=-1)) * mask
         s1, s2, s3 = torch.split(
             v,
             split_size_or_sections=self.n_feature,
@@ -357,13 +302,10 @@ class Interaction(nn.Module):
         )
         s_m = s_n1 + s_n2 * (v1 * v2).sum(dim=-2)
         s_out = self.res(s_m) + o
-        v = v.unsqueeze(dim=-3)
-        if s1.dim() == 4:
-            v_m = s_n3.unsqueeze(dim=-2) * v3 + (
-                s2.unsqueeze(dim=-2) * v + s3.unsqueeze(dim=-2) * d_vec_norm
-            ).sum(dim=-3)
-        else:  # higher order L = 3
-            v_m = s_n3.unsqueeze(dim=-2) * v3 + (s2 * v + s3 * d_vec_norm).sum(dim=-3)
+        v = v[:, :, None, :, :]
+        v_m = s_n3[:, :, None, :] * v3 + (
+            s2[:, :, :, None, :] * v + s3[:, :, :, None, :] * d_vec_norm
+        ).sum(dim=-3)
         return s_m, s_out, v_m, attn_matrix
 
 
@@ -394,7 +336,7 @@ class GatedEquivariant(nn.Module):
         # add 1e-8 to avoid nan in the gradient of gradient in some extreme cases
         s0 = self.a(torch.cat([s, torch.linalg.norm(v2 + 1e-8, 2, -2)], dim=-1))
         sg, ss = torch.split(s0, split_size_or_sections=self.n_feature, dim=-1)
-        vg = v1 * ss.unsqueeze(dim=-2)
+        vg = v1 * ss[:, :, None, :]
         return sg, vg
 
 
