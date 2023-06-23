@@ -122,7 +122,7 @@ class CMRET(nn.Module):
         cutoff = self.cutoff(d).unsqueeze(dim=-1)
         h = batch_mask.shape[1]
         cutoff *= batch_mask[loop_mask].view(1, h, h - 1, 1)
-        e = self.rbf(d=d, d_vec=d_vec) * cutoff
+        e = self.rbf(d) * cutoff
         d_vec_norm = (
             d_vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
         ).unsqueeze(dim=-1)
@@ -251,6 +251,28 @@ class CMRETModel(nn.Module):
             self.load_state_dict(state_dict=state_dict["nn"])
             self.unit = state_dict["unit"]
         return self
+
+    @classmethod
+    def from_checkpoint(cls, file: str) -> nn.Module:
+        with open(file, mode="rb") as f:
+            state_dict = torch.load(f, map_location="cpu")
+        nn = state_dict["nn"]
+        args = state_dict["args"]
+        unit = state_dict["unit"]
+        model = CMRETModel(
+            cutoff=args["cutoff"],
+            n_kernel=args["n_kernel"],
+            n_atom_basis=args["n_atom_basis"],
+            n_interaction=args["n_interaction"],
+            n_output=args["n_output"],
+            rbf_type=args["rbf_type"],
+            num_head=args["num_head"],
+            temperature_coeff=args["temperature_coeff"],
+            output_mode=args["output_mode"],
+        )
+        model.load_state_dict(state_dict=nn)
+        model.unit = unit
+        return model
 
     @property
     def check_parameter_number(self) -> int:

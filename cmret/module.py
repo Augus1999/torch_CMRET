@@ -22,12 +22,11 @@ class RBF1(nn.Module):
         offsets = torch.linspace(1.0, n_kernel, n_kernel)
         self.register_buffer("offsets", offsets[None, None, None, :])
 
-    def forward(self, **kargv: Tensor) -> Tensor:
+    def forward(self, d: Tensor) -> Tensor:
         """
         :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
         :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
         """
-        d = kargv["d"]
         out = (
             torch.pi * self.offsets * d[:, :, :, None] / self.cell
         ).sin() / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
@@ -52,12 +51,11 @@ class RBF2(nn.Module):
         self.offsets = nn.Parameter(offsets, requires_grad=True)
         self.coeff = nn.Parameter(coeff / 4, requires_grad=True)
 
-    def forward(self, **kargv: Tensor) -> Tensor:
+    def forward(self, d: Tensor) -> Tensor:
         """
         :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
         :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
         """
-        d = kargv["d"]
         out = (-self.coeff * ((-d[:, :, :, None]).exp() - self.offsets).pow(2)).exp()
         return out
 
