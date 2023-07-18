@@ -291,10 +291,9 @@ class Interaction(nn.Module):
             split_size_or_sections=self.n_feature,
             dim=-1,
         )
-        s1_sum = s1.sum(dim=-2) if s1.dim() == 4 else s1.sum(dim=[-3, -2])
         s_nonlocal, attn_matrix = self.nonloacl(s, batch_mask, return_attn_matrix)
         s_n1, s_n2, s_n3 = torch.split(
-            self.o(s + s_nonlocal + s1_sum),
+            self.o(s + s_nonlocal + s1.sum(dim=-2)),
             split_size_or_sections=self.n_feature,
             dim=-1,
         )

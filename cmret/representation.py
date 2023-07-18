@@ -238,6 +238,7 @@ class CMRETModel(nn.Module):
             average_attn_matrix_over_layers,
         )
 
+    @torch.jit.ignore
     def pretrained(self, file: Optional[str]) -> nn.Module:
         """
         Load pre-trained weight.
@@ -254,6 +255,12 @@ class CMRETModel(nn.Module):
 
     @classmethod
     def from_checkpoint(cls, file: str) -> nn.Module:
+        """
+        Return the model from a checkpoint (with 'args' key stored).
+
+        :param file: checkpoint file name <file>
+        :return: stored model
+        """
         with open(file, mode="rb") as f:
             state_dict = torch.load(f, map_location="cpu")
         nn = state_dict["nn"]

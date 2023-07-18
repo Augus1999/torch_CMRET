@@ -342,11 +342,11 @@ def extract_log_info(log_name: str = "training.log") -> Dict[str, List]:
     info = {"epoch": [], "loss": []}
     with open(log_name, mode="r", encoding="utf-8") as f:
         lines = f.read()
-    loss_info = re.findall(r"epoch: \d+ loss: \d+(.\d+(e|E)?(-|\+)?\d+)?", lines)
+    loss_info = re.findall(r"epoch: (\d+) loss: (\d+(.\d+(e|E)?(-|\+)?\d+)?)", lines)
     if loss_info:
         for i in loss_info:
-            epoch = int(i.split(" ")[1])
-            loss = float(i.split(" ")[-1])
+            epoch = int(i[0])
+            loss = float(i[1])
             info["epoch"].append(epoch)
             info["loss"].append(loss)
     return info
