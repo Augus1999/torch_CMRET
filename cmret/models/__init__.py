@@ -10,6 +10,7 @@ pretrain = Path(__file__).parent
 names = {
     "md17": pretrain / "md17.h5",
     "coll": pretrain / "coll.h5",
+    "ccsd": pretrain / "ani1ccx.h5",
     "iso17": pretrain / "iso17.h5",
     "dimer": pretrain / "des370k.h5",
 }
