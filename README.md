@@ -1,5 +1,5 @@
 # Comprehensive Molecular Representation from Equivariant Transformer
-CMRET is an equivarient garph neural network that maps molecular geometry to its energy and atomic forces. Note this is still an experimental project.
+CMRET is an equivariant garph neural network that maps molecular geometry to its energy and atomic forces. Note this is still an experimental project.
 
 ![OS](https://img.shields.io/badge/OS-Windows%20|%20Linux%20|%20macOS-blue?color=00b166)
 ![python](https://img.shields.io/badge/Python-3.9%20|%203.10-blue.svg?color=dd9b65)
@@ -26,10 +26,12 @@ See examples:
 
 ## Cite
 ```bibtex
-@article{tao2023cmret,
-	title={Comprehensive Molecular Representation from Equivariant Transformer},
-	author={Tao, Nianze and Morimoto, Hiromi and Leoni, Stefano},
-	journal={arXiv preprint arXiv:},
-	year={2023}
+@misc{2023cmret,
+      title={Comprehensive Molecular Representation from Equivariant Transformer}, 
+      author={Nianze Tao and Hiromi Morimoto and Stefano Leoni},
+      year={2023},
+      eprint={2308.10752},
+      archivePrefix={arXiv},
+      primaryClass={physics.comp-ph}
 }
 ```
