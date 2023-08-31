@@ -10,8 +10,6 @@ CMRET is an equivariant garph neural network that maps molecular geometry to its
 ```txt
 torch>=2.0.0
 ase>=3.22.0
-clint
-requests
 ```
 
 ## Usage
