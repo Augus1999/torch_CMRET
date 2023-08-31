@@ -4,7 +4,7 @@
 Utils
 """
 from .md import Molecule
-from .dataset import DataSet
+from .dataset import ASEData, XYZData
 from .tools import (
     scalar_vector_loss,
     scalar_loss,
@@ -17,7 +17,8 @@ from .tools import (
 
 __all__ = [
     "Molecule",
-    "DataSet",
+    "ASEData",
+    "XYZData",
     "scalar_vector_loss",
     "scalar_loss",
     "train",

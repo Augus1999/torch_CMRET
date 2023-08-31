@@ -1,4 +1,2 @@
 torch>=2.0.0
 ase>=3.22.0
-clint
-requests

@@ -17,7 +17,7 @@ requests
 ## Usage
 See examples:
 
-[train and test on MD17 dataset](script/run_md17.py)
+[train and test on CH2 dataset](script/run_ch2.py)
 
 [train and test on ISO17 dataset](script/run_iso17.py)
 
