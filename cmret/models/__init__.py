@@ -13,6 +13,7 @@ names = {
     "ccsd": pretrain / "ani1ccx.h5",
     "iso17": pretrain / "iso17.h5",
     "dimer": pretrain / "des370k.h5",
+    "ani1x": pretrain / "ani1x.h5",
 }
 
 

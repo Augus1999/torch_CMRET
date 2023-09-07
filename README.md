@@ -1,5 +1,5 @@
 # Comprehensive Molecular Representation from Equivariant Transformer
-CMRET is an equivariant garph neural network that maps molecular geometry to its energy and atomic forces. Note this is still an experimental project.
+CMRET provides spin (S) and/or molecular charge (Q) awared machine learning force fields. Note this is still an experimental project.
 
 ![OS](https://img.shields.io/badge/OS-Windows%20|%20Linux%20|%20macOS-blue?color=00b166)
 ![python](https://img.shields.io/badge/Python-3.9%20|%203.10-blue.svg?color=dd9b65)
@@ -15,7 +15,7 @@ ase>=3.22.0
 ## Usage
 See examples:
 
-[train and test on CH2 dataset](script/run_ch2.py)
+[train and test on singlet/triplet CH<sub>2</sub> dataset](script/run_ch2.py)
 
 [train and test on ISO17 dataset](script/run_iso17.py)
 

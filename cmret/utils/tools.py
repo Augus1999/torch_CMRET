@@ -207,7 +207,7 @@ def train(
         batch_size=batch_size,
         collate_fn=collate,
         shuffle=True,
-        num_workers=1,
+        num_workers=min(4, os.cpu_count()),
     )
     train_size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
