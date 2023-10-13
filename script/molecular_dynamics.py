@@ -3,13 +3,42 @@
 """
 MD test
 """
-import torch
-from cmret.utils import Molecule
+from ase.md.langevin import Langevin
+from ase import units
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
+from ase.io import read, Trajectory
 from cmret import trained_model
+from cmret.utils import CMRETCalculator
 
-carbene = Molecule()
-carbene.from_file("carbene.xyz")
-carbene.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-carbene.calculator = trained_model(name="coll")
-carbene.run(temperature=298, delta_t=1e-18, step=100000)
-molecules = carbene.molecule
+
+model = trained_model("ani1x")
+cal = CMRETCalculator(model)
+atoms = read("edta.sdf")
+atoms.calc = cal
+atoms.get_potential_energy()
+
+steps = 0
+
+
+def printenergy(a=atoms):
+    """
+    Print the potential, kinetic and total energy.
+    """
+    epot = a.get_potential_energy()
+    ekin = a.get_kinetic_energy()
+    temp = ekin / (1.5 * units.kB) / a.get_global_number_of_atoms()
+    global steps
+    steps += 1
+    with open("md.log", "a") as f:
+        f.write(
+            f"Steps={steps:12.3f} Etot={epot + ekin:12.3f} Epot={epot:12.3f} Ekin={ekin:12.3f} temperature={temp:8.2f}\n"
+        )
+
+
+MaxwellBoltzmannDistribution(atoms, temperature_K=350)
+dyn = Langevin(atoms, 0.5 * units.fs, temperature_K=350, friction=0.1)
+dyn.attach(printenergy, interval=1)
+
+traj = Trajectory("md.traj", "w", atoms)
+dyn.attach(traj.write, interval=400)
+dyn.run(10000)
