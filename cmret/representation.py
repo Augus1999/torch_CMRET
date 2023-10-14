@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
-Model representation
+Model representation.
 """
 from typing import Dict, Optional
 import torch

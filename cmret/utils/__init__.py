@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
-Utils
+Utils.
 """
 from .ase_interface import CMRETCalculator
 from .dataset import ASEData, XYZData

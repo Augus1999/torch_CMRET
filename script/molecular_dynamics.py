@@ -13,9 +13,11 @@ from cmret.utils import CMRETCalculator
 
 model = trained_model("ani1x")
 cal = CMRETCalculator(model)
-atoms = read("edta.sdf")
+atoms = read("edta.sdf")  # use your own input file here!
+# you can define the total spin and/or charge as following:
+# atoms.info: Dict[str, float] = {"S": 0, "Q": 0}
 atoms.calc = cal
-atoms.get_potential_energy()
+atoms.get_potential_energy()  # call this method first
 
 steps = 0
 
@@ -40,5 +42,5 @@ dyn = Langevin(atoms, 0.5 * units.fs, temperature_K=350, friction=0.1)
 dyn.attach(printenergy, interval=1)
 
 traj = Trajectory("md.traj", "w", atoms)
-dyn.attach(traj.write, interval=400)
+dyn.attach(traj.write, interval=10)
 dyn.run(10000)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. TAO (Omozawa SUENO)
 """
-Pre-trained models
+Pre-trained models.
 """
 from pathlib import Path
 import torch

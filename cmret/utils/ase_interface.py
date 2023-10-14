@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
-Define ASE calculator
+Define ASE calculator.
 """
-from typing import List, Dict
+from typing import List, Dict, Union
 import torch
 import torch.nn as nn
+from numpy import ndarray
 from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 
@@ -21,8 +22,14 @@ unit_factor = {r"Hartree": E_h, r"eV": E_eV, r"kcal/mol": E_kcal_mol}
 class CMRETCalculator(Calculator):
     implemented_properties = ["energy", "forces", "dipole"]
 
-    def __init__(self, model: nn.Module, **kwargs: str) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, model: nn.Module, **kargv: str) -> None:
+        """
+        ASE calculator class wrapping CMRET model.
+
+        :param model: a trained CMRET model
+        :param kargv: any argument (not in use)
+        """
+        super().__init__(**kargv)
         self.model = model
         self.device = next(model.parameters()).device
         if model.unit in unit_factor:
@@ -36,7 +43,7 @@ class CMRETCalculator(Calculator):
         atoms: Atoms,
         properties: List[str] = ["energy", "forces", "dipole"],
         system_changes: List[str] = all_changes,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> Dict[str, Union[float, ndarray]]:
         """
         Calculate the properties.
 
@@ -50,6 +57,13 @@ class CMRETCalculator(Calculator):
         R = torch.tensor(atoms_.positions, dtype=torch.float32)[None, :, :]
         mol = {"Z": Z.to(device=self.device), "R": R.to(device=self.device)}
         mol["batch"] = torch.ones_like(mol["Z"]).unsqueeze(dim=-1)
+        mol_info = atoms_.info
+        if "S" in mol_info:
+            spin = mol_info["S"]
+            mol["S"] = torch.tensor([[spin]], dtype=torch.float32, device=self.device)
+        if "Q" in mol_info:
+            charge = mol_info["Q"]
+            mol["Q"] = torch.tensor([[charge]], dtype=torch.float32, device=self.device)
         res = self.model(mol)
         results = {}
         if self.flag:

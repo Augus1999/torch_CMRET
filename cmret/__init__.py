@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
-CMRET package
+CMRET package.
 """
 from . import representation, utils
 from .models import trained_model

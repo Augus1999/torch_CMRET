@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
-CMRET embedding modules
+CMRET embedding modules.
 """
 import torch
 import torch.nn as nn

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
-CMRET nn modules
+CMRET nn modules.
 """
 from typing import Tuple, Optional
 import torch

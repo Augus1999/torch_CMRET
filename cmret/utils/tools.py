@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. TAO (Omozawa SUENO)
 """
-Useful tools (hopefully :)
+Tools to train & test the model, extract info from log, and split dataset stored in xyz files.
 """
 import os
 import re
