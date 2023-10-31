@@ -83,6 +83,7 @@ class CMRET(nn.Module):
             "Z": nuclear charges tensor;      shape: (1, n_a)
             "R": nuclear coordinates tensor;  shape: (1, n_a, 3)
             "batch": batch mask;              shape: (n_b, n_a, 1)
+            "lattice": lattice vectors;       shape: (n_b, 3, 3) which is optional
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }
@@ -93,6 +94,19 @@ class CMRET(nn.Module):
         z, r, batch = mol["Z"], mol["R"], mol["batch"]
         r.requires_grad = self.dy
         v = torch.zeros_like(r)[:, :, :, None].repeat(1, 1, 1, self.n)
+        lattice = None
+        if "lattice" in mol:
+            lattice = mol["lattice"]
+            # Maybe we don't need the following code.
+            # cell_len = torch.linalg.norm(lattice.to("cpu"), 2, -1)
+            # cell_arg = (cell_len < 2 * self.cutoff.cutoff.to("cpu")) & (cell_len > 0)
+            # cell_arg = cell_arg.flatten().float()
+            # if cell_arg.sum() > 0:
+            #     warnings.warn(
+            #         f"The vector length of cell {','.join(list(set([str(key // 3) for key, i in enumerate(cell_arg) if i.item() == 1])))} is smaller than 2 * cutoff radius.",
+            #         RuntimeWarning,
+            #     )
+            lattice = (lattice[:, None, :, :] * batch[:, :, :, None]).sum(0, True)
         if "Q" in mol:
             q_info = mol["Q"]
             z_info = z.repeat(q_info.shape[0], 1) * batch.squeeze(dim=-1)
@@ -118,7 +132,7 @@ class CMRET(nn.Module):
         batch_mask = batch_mask_[None, :, :, None]  # shape: (1, n_a, n_a, 1)
         batch_mask_ = batch_mask_ == 0  # shape: (n_a, n_a)
         # ------------------------------------------------------------------------
-        d, d_vec = self.distance(r, batch_mask, loop_mask)
+        d, d_vec = self.distance(r, batch_mask, loop_mask, lattice)
         cutoff = self.cutoff(d).unsqueeze(dim=-1)
         h = batch_mask.shape[1]
         cutoff *= batch_mask[loop_mask].view(1, h, h - 1, 1)
@@ -225,6 +239,7 @@ class CMRETModel(nn.Module):
             "Z": nuclear charges tensor;      shape: (1, n_a)
             "R": nuclear coordinates tensor;  shape: (1, n_a, 3)
             "batch": batch mask;              shape: (n_b, n_a, 1)
+            "lattice": lattice vectors;       shape: (n_b, 3, 3) which is optional
             "Q": total charge tensor;         shape: (n_b, 1) which is optional
             "S": spin state tensor;           shape: (n_b, 1) which is optional
         }

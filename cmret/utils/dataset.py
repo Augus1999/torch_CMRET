@@ -10,6 +10,7 @@ where mol_dict is a dictionary as {
                                     "R": atomic positions (Tensor),
                                     "Q": molecular net charge (Tensor) which is optional,
                                     "S": spin state (Tensor) which is optional,
+                                    "lattice": non-unit lattice vectors (Tensor) which is optional,
                                     }
 and label_dict is dictionary as {
                                   "scalar": scalar property (Tensor), 
@@ -30,6 +31,7 @@ class ASEData(data.Dataset):
         file: str,
         limit: Optional[int] = None,
         task: Optional[str] = None,
+        use_pbc: bool = False,
     ) -> None:
         """
         Dataset stored in sql via ASE.
@@ -37,12 +39,14 @@ class ASEData(data.Dataset):
         :param file: dataset file name <file>
         :param limit: item limit
         :param task: task name
+        :param use_pbc: whether to apply PBC in a cell
         """
         super().__init__()
         with connect(file) as db:
             data = db.select(limit=limit)
         self.data = list(data)
         self.task = task
+        self.use_pbc = use_pbc
 
     def __len__(self):
         return len(self.data)
@@ -54,6 +58,12 @@ class ASEData(data.Dataset):
         charges = torch.tensor(d.numbers, dtype=torch.long)
         positions = torch.tensor(d.positions, dtype=torch.float32)
         mol = {"Z": charges, "R": positions}
+        lattice = torch.tensor(d.cell, dtype=torch.float32)
+        if lattice.abs().sum() > 0:
+            pbc = torch.tensor(d.pbc, dtype=torch.float32)
+            if pbc.sum() > 0 and self.use_pbc:
+                # mask the non-periodic direction(s)
+                mol["lattice"] = lattice * pbc[None, :]
         if "S" in d.data:
             mol["S"] = torch.tensor(d.data.S, dtype=torch.float32)
         if "Q" in d.data:
@@ -73,15 +83,18 @@ class XYZData(data.Dataset):
         self,
         file: str,
         limit: Optional[int] = None,
+        use_pbc: bool = False,
     ) -> None:
         """
         Dataset stored in extend xyz file.
 
         :param file: dataset file name <file>
         :param limit: item limit
+        :param use_pbc: whether to apply PBC in a cell
         """
         super().__init__()
         self.data = read(file, index=f":{limit if limit else ''}")
+        self.use_pbc = use_pbc
 
     def __len__(self):
         return len(self.data)
@@ -93,6 +106,12 @@ class XYZData(data.Dataset):
         charges = torch.tensor(d.numbers, dtype=torch.long)
         positions = torch.tensor(d.positions, dtype=torch.float32)
         mol = {"Z": charges, "R": positions}
+        lattice = torch.tensor(d.cell, dtype=torch.float32)
+        if lattice.abs().sum() > 0:
+            pbc = torch.tensor(d.pbc, dtype=torch.float32)
+            if pbc.sum() > 0 and self.use_pbc:
+                # mask the non-periodic direction(s)
+                mol["lattice"] = lattice * pbc[None, :]
         energy = torch.tensor([d.get_total_energy()], dtype=torch.float32)
         label = {"scalar": energy}
         try:

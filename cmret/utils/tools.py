@@ -115,6 +115,7 @@ def collate(batch: List) -> Dict[str, Tensor]:
                                 "R": coordinates
                                 "Q": molecular net charges (optional)
                                 "S": net spin state (optional)
+                                "lattice": lattice vectors (optional)
                                 "batch": batch mask (for instance molecule A has 4 atoms
                                                      and molecule B has 3 atoms then the
                                                      batched indices is [[1, 1, 1, 1, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]])
@@ -124,7 +125,7 @@ def collate(batch: List) -> Dict[str, Tensor]:
     label = [i["label"] for i in batch]
     charges, positions, mask = [], [], []
     scalars, vectors, coords = [], [], []
-    charge, spin = [], []
+    charge, spin, lattice = [], [], []
     for key, item in enumerate(mol):
         charges.append(item["Z"])
         positions.append(item["R"])
@@ -138,6 +139,8 @@ def collate(batch: List) -> Dict[str, Tensor]:
             charge.append(item["Q"].unsqueeze(dim=0))
         if "S" in item:
             spin.append(item["S"].unsqueeze(dim=0))
+        if "lattice" in item:
+            lattice.append(item["lattice"].unsqueeze(dim=0))
     charges = torch.cat(charges, dim=0).unsqueeze(dim=0)
     positions = torch.cat(positions, dim=0).unsqueeze(dim=0)
     n_total = charges.shape[1]
@@ -154,6 +157,8 @@ def collate(batch: List) -> Dict[str, Tensor]:
         mol["Q"] = torch.cat(charge, dim=0)
     if spin:
         mol["S"] = torch.cat(spin, dim=0)
+    if lattice:
+        mol["lattice"] = torch.cat(lattice, dim=0)
     label = {}
     if scalars:
         label["scalar"] = torch.cat(scalars, dim=0)

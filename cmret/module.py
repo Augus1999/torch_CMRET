@@ -88,20 +88,44 @@ class Distance(nn.Module):
         super().__init__()
 
     def forward(
-        self, r: Tensor, batch_mask: Tensor, loop_mask: Tensor
+        self,
+        r: Tensor,
+        batch_mask: Tensor,
+        loop_mask: Tensor,
+        lattice: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
-        :param r: nuclear coordinates;  shape: (1, n_a, 3)
-        :param batch_mask: batch mask;  shape: (1, n_a, n_a, 1)
-        :param loop_mask: loop mask;    shape: (1, n_a, n_a)
-        :return: d, d_vec;              shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3)
+        :param r: nuclear coordinates;    shape: (1, n_a, 3)
+        :param batch_mask: batch mask;    shape: (1, n_a, n_a, 1)
+        :param loop_mask: loop mask;      shape: (1, n_a, n_a)
+        :param lattice: lattice vectors;  shape: (1, n_a, 3, 3)
+        :return: d, d_vec;                shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3)
         """
         n_b, n_a, _ = r.shape
         d_vec = r[:, :, None, :] - r[:, None, :, :]
-        d_vec = d_vec * batch_mask
-        # remove 0 vectors
-        d_vec = d_vec[loop_mask].view(n_b, n_a, n_a - 1, 3)
-        d = torch.linalg.norm(d_vec, 2, -1)
+        d_vec_ = d_vec * batch_mask  # reomve 'off-diagonal' elements
+        d_vec = d_vec_[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
+        if lattice is not None:
+            # compute distances under periodic boundary conditions
+            r_shift1 = r + lattice[::, ::, 0]
+            r_shift2 = r + lattice[::, ::, 1]
+            r_shift3 = r + lattice[::, ::, 2]
+            vec_shift1 = r[:, :, None, :] - r_shift1[:, None, :, :]
+            vec_shift2 = r[:, :, None, :] - r_shift2[:, None, :, :]
+            vec_shift3 = r[:, :, None, :] - r_shift3[:, None, :, :]
+            d_0shift = torch.linalg.norm(d_vec_, 2, -1).unsqueeze(0)
+            d_shift1 = torch.linalg.norm(vec_shift1, 2, -1).unsqueeze(0)
+            d_shift2 = torch.linalg.norm(vec_shift2, 2, -1).unsqueeze(0)
+            d_shift3 = torch.linalg.norm(vec_shift3, 2, -1).unsqueeze(0)
+            ds = torch.cat([d_0shift, d_shift1, d_shift2, d_shift3], dim=0)
+            d_asy = torch.min(ds, dim=0).values  # min distances
+            d_tril = torch.tril(d_asy, -1)
+            d_triu = torch.triu(d_asy, 0).transpose(-2, -1)
+            d_tri = torch.cat([d_tril.unsqueeze(0), d_triu.unsqueeze(0)], 0)
+            d_tri = torch.min(d_tri, dim=0).values  # use symmetry
+            d = (d_tri + d_tri.transpose(-2, -1))[loop_mask].view(1, n_a, n_a - 1)
+        else:
+            d = torch.linalg.norm(d_vec, 2, -1)
         return d, d_vec
 
 
