@@ -2,6 +2,7 @@
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
 CMRET package.
+We haven't supported TorchScript yet.
 """
 from . import representation, utils
 from .models import trained_model

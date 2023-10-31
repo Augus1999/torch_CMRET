@@ -97,15 +97,6 @@ class CMRET(nn.Module):
         lattice = None
         if "lattice" in mol:
             lattice = mol["lattice"]
-            # Maybe we don't need the following code.
-            # cell_len = torch.linalg.norm(lattice.to("cpu"), 2, -1)
-            # cell_arg = (cell_len < 2 * self.cutoff.cutoff.to("cpu")) & (cell_len > 0)
-            # cell_arg = cell_arg.flatten().float()
-            # if cell_arg.sum() > 0:
-            #     warnings.warn(
-            #         f"The vector length of cell {','.join(list(set([str(key // 3) for key, i in enumerate(cell_arg) if i.item() == 1])))} is smaller than 2 * cutoff radius.",
-            #         RuntimeWarning,
-            #     )
             lattice = (lattice[:, None, :, :] * batch[:, :, :, None]).sum(0, True)
         if "Q" in mol:
             q_info = mol["Q"]
@@ -253,7 +244,6 @@ class CMRETModel(nn.Module):
             average_attn_matrix_over_layers,
         )
 
-    @torch.jit.ignore
     def pretrained(self, file: Optional[str]) -> nn.Module:
         """
         Load pre-trained weight.

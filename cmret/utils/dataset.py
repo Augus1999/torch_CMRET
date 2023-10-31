@@ -63,7 +63,7 @@ class ASEData(data.Dataset):
             pbc = torch.tensor(d.pbc, dtype=torch.float32)
             if pbc.sum() > 0 and self.use_pbc:
                 # mask the non-periodic direction(s)
-                mol["lattice"] = lattice * pbc[None, :]
+                mol["lattice"] = lattice * pbc[None, :]  # shape: (3, 3)
         if "S" in d.data:
             mol["S"] = torch.tensor(d.data.S, dtype=torch.float32)
         if "Q" in d.data:
@@ -113,10 +113,10 @@ class XYZData(data.Dataset):
                 # mask the non-periodic direction(s)
                 mol["lattice"] = lattice * pbc[None, :]
         energy = torch.tensor([d.get_total_energy()], dtype=torch.float32)
-        label = {"scalar": energy}
+        label = {"scalar": energy}  # shape: (1,)
         try:
             forces = torch.tensor(d.get_forces(), dtype=torch.float32)
-            label["vector"] = forces
+            label["vector"] = forces  # shape: (n_a, 3)
         except AttributeError:
             pass
         return {"mol": mol, "label": label}

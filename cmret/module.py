@@ -159,7 +159,6 @@ class CFConv(nn.Module):
         :param n_feature: number of feature dimensions
         """
         super().__init__()
-        self.n_feature = n_feature
         self.w1 = nn.Sequential(
             nn.Linear(in_features=n_kernel, out_features=n_feature, bias=True),
             nn.SiLU(),
@@ -187,7 +186,7 @@ class CFConv(nn.Module):
 
     def forward(
         self, x: Tensor, e: Tensor, mask: Tensor, loop_mask: Tensor
-    ) -> Tuple[Tensor]:
+    ) -> Tuple[Tensor, Tensor, Tensor]:
         """
         :param x: input info;              shape: (1, n_a, n_f)
         :param e: extended tensor;         shape: (1, n_a, n_a - 1, n_k)
@@ -203,11 +202,7 @@ class CFConv(nn.Module):
         v1 = x[:, :, None, :] * w1 * mask
         v2 = x_nbs * w2 * mask
         v = self.o(torch.cat([v1, v2], dim=-1)) * mask
-        s1, s2, s3 = torch.split(
-            v,
-            split_size_or_sections=self.n_feature,
-            dim=-1,
-        )
+        s1, s2, s3 = v.chunk(3, -1)
         return s1, s2, s3
 
 
@@ -274,7 +269,6 @@ class Interaction(nn.Module):
         :param temperature_coeff: temperature coefficient
         """
         super().__init__()
-        self.n_feature = n_feature
         self.cfconv = CFConv(n_kernel=n_kernel, n_feature=n_feature)
         self.nonloacl = NonLoacalInteraction(
             n_feature=n_feature, num_head=num_head, temperature_coeff=temperature_coeff
@@ -310,17 +304,9 @@ class Interaction(nn.Module):
         :return: new scale & output scale & vector info & attention matrix
         """
         s1, s2, s3 = self.cfconv(s, e, mask, loop_mask)
-        v1, v2, v3 = torch.split(
-            self.u(v),
-            split_size_or_sections=self.n_feature,
-            dim=-1,
-        )
+        v1, v2, v3 = self.u(v).chunk(3, -1)
         s_nonlocal, attn_matrix = self.nonloacl(s, batch_mask, return_attn_matrix)
-        s_n1, s_n2, s_n3 = torch.split(
-            self.o(s + s_nonlocal + s1.sum(dim=-2)),
-            split_size_or_sections=self.n_feature,
-            dim=-1,
-        )
+        s_n1, s_n2, s_n3 = self.o(s + s_nonlocal + s1.sum(-2)).chunk(3, -1)
         s_m = s_n1 + s_n2 * (v1 * v2).sum(dim=-2)
         s_out = self.res(s_m) + o
         v = v[:, :, None, :, :]
@@ -338,7 +324,6 @@ class GatedEquivariant(nn.Module):
         :param n_feature: number of feature dimension
         """
         super().__init__()
-        self.n_feature = n_feature
         self.u = nn.Linear(in_features=n_feature, out_features=n_feature, bias=False)
         self.v = nn.Linear(in_features=n_feature, out_features=n_feature, bias=False)
         self.a = nn.Sequential(
@@ -347,7 +332,7 @@ class GatedEquivariant(nn.Module):
             nn.Linear(in_features=n_feature, out_features=n_feature * 2, bias=True),
         )
 
-    def forward(self, s: Tensor, v: Tensor) -> Tuple[Tensor]:
+    def forward(self, s: Tensor, v: Tensor) -> Tuple[Tensor, Tensor]:
         """
         :param s: scale info;   shape: (1, n_a, n_f)
         :param v: vector info;  shape: (1, n_a, 3, n_f)
@@ -356,7 +341,7 @@ class GatedEquivariant(nn.Module):
         v1, v2 = self.u(v), self.v(v)
         # add 1e-8 to avoid nan in the gradient of gradient in some extreme cases
         s0 = self.a(torch.cat([s, torch.linalg.norm(v2 + 1e-8, 2, -2)], dim=-1))
-        sg, ss = torch.split(s0, split_size_or_sections=self.n_feature, dim=-1)
+        sg, ss = s0.chunk(2, -1)
         vg = v1 * ss[:, :, None, :]
         return sg, vg
 
