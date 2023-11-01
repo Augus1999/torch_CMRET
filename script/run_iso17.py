@@ -16,6 +16,11 @@ from cmret.representation import CMRETModel
 
 root = Path(__file__).parent
 
+# you can set 'num_workers' varibale in torch.utils.data.DataLoader
+# by un-commentting the following:
+# import os
+# os.environ["NUM_WORKER"] = "x"  # here 'x' is the number of workers you want 
+
 
 class ASEData(data.Dataset):
     def __init__(

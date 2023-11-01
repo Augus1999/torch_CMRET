@@ -15,6 +15,11 @@ import torch.optim as op
 from torch import Tensor
 from torch.utils.data import DataLoader
 
+# set 'num_workers' varibale in torch.utils.data.DataLoader
+os.environ["NUM_WORKER"] = "4"
+if hasattr(os, "sched_getaffinity"):
+    os.environ["NUM_WORKER"] = f"{len(os.sched_getaffinity(0))}"
+
 
 class _TwoCycleLR:
     def __init__(self, optimizer, total_steps: int, step_size_up: int = 100000) -> None:
@@ -212,7 +217,7 @@ def train(
         batch_size=batch_size,
         collate_fn=collate,
         shuffle=True,
-        num_workers=min(4, os.cpu_count()),
+        num_workers=int(os.environ["NUM_WORKER"]),
     )
     train_size = len(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
