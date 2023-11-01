@@ -8,6 +8,7 @@ from .dataset import ASEData, XYZData
 from .tools import (
     scalar_vector_loss,
     scalar_loss,
+    pretrain_loss,
     train,
     test,
     split_data,
@@ -21,6 +22,7 @@ __all__ = [
     "XYZData",
     "scalar_vector_loss",
     "scalar_loss",
+    "pretrain_loss",
     "train",
     "test",
     "split_data",

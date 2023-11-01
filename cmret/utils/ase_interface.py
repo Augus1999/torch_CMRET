@@ -58,7 +58,7 @@ class CMRETCalculator(Calculator):
         lattice = torch.tensor(atoms_.cell.array, dtype=torch.float32)
         if lattice.abs().sum() > 0:
             pbc = torch.tensor(atoms_.pbc, dtype=torch.float32)
-            lattice *= pbc[None, :]  # mask the non-periodic direction(s)
+            lattice *= pbc[:, None]  # mask the non-periodic direction(s)
             mol["lattice"] = lattice[None, :, :].to(self.device)
         mol_info = atoms_.info
         if "S" in mol_info:
