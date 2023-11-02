@@ -54,7 +54,7 @@ class CMRETCalculator(Calculator):
         Z = torch.tensor(atoms_.numbers, dtype=torch.long)[None, :]
         R = torch.tensor(atoms_.positions, dtype=torch.float32)[None, :, :]
         mol = {"Z": Z.to(device=self.device), "R": R.to(device=self.device)}
-        mol["batch"] = torch.ones_like(mol["Z"]).unsqueeze(dim=-1)
+        mol["batch"] = torch.ones_like(mol["Z"], dtype=torch.float32).unsqueeze(dim=-1)
         lattice = torch.tensor(atoms_.cell.array, dtype=torch.float32)
         if lattice.abs().sum() > 0:
             pbc = torch.tensor(atoms_.pbc, dtype=torch.float32)
