@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from torch.utils import data
 from cmret.utils import train, test, find_recent_checkpoint
-from cmret.representation import CMRETModel
+from cmret import CMRETModel
 
 
 root = Path(__file__).parent
@@ -86,10 +86,9 @@ def main():
 
     train(
         model=model,
-        dataset=dataset,
-        batch_size=args.batchsize,
+        datasets=[dataset],
+        batch_sizes=[args.batchsize],
         max_n_epochs=args.nepoch,
-        unit="eV",
         load=load,
         save_every=10,
         work_dir=workdir,
