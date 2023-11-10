@@ -8,7 +8,7 @@ import re
 import glob
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict, Union, Generator, Callable
+from typing import Optional, Tuple, List, Dict, Union, Iterable, Callable
 import torch
 import torch.nn as nn
 import torch.optim as op
@@ -19,6 +19,22 @@ from torch.utils.data import DataLoader
 os.environ["NUM_WORKER"] = "4"
 if hasattr(os, "sched_getaffinity"):
     os.environ["NUM_WORKER"] = f"{len(os.sched_getaffinity(0))}"
+
+
+DEFAULT_NN_INFO = {
+    "args": {
+        "cutoff": 5.0,
+        "n_kernel": 50,
+        "n_atom_basis": 128,
+        "n_interaction": 6,
+        "n_output": 2,
+        "rbf_type": "gaussian",
+        "num_head": 4,
+        "temperature_coeff": 2.0,
+        "output_mode": "energy-force",
+    },
+    "unit": "eV",
+}
 
 
 class _TwoCycleLR:
@@ -176,11 +192,11 @@ def collate(batch: List) -> Dict[str, Tensor]:
 
 def train(
     model: nn.Module,
-    dataset: Generator,
-    batch_size: int = 5,
+    datasets: Union[List[Iterable], Tuple[Iterable]],
+    batch_sizes: Union[List[int], Tuple[int]] = [5],
     max_n_epochs: int = 20000,
     loss_calculator=scalar_vector_loss,
-    unit: str = "eV",
+    nn_info: Dict[str, Union[str, int, float]] = DEFAULT_NN_INFO,
     load: Optional[str] = None,
     log_dir: Optional[str] = None,
     work_dir: str = ".",
@@ -190,11 +206,11 @@ def train(
     Trian the network.
 
     :param model: model for training
-    :param dataset: training set
-    :param batch_size: mini-batch size
+    :param datasets: training set(s)
+    :param batch_sizes: mini-batch size(s)
     :param max_n_epochs: max training epochs size
     :param loss_calculator: loss calculator
-    :param unit: dataset energy unit
+    :param nn_info: neural network information
     :param load: load from an existence state file <file>
     :param log_dir: where to store log file <file>
     :param work_dir: where to store model state_dict <path>
@@ -212,20 +228,25 @@ def train(
         level=logging.DEBUG,
     )
     start_epoch: int = 0
-    loader = DataLoader(
-        dataset=dataset,
-        batch_size=batch_size,
-        collate_fn=collate,
-        shuffle=True,
-        num_workers=int(os.environ["NUM_WORKER"]),
-    )
-    train_size = len(loader)
+    loaders: List = []
+    train_size: int = 0
+    for dataset_idx, dataset in enumerate(datasets):
+        loader = DataLoader(
+            dataset=dataset,
+            batch_size=batch_sizes[dataset_idx],
+            collate_fn=collate,
+            shuffle=True,
+            num_workers=int(os.environ["NUM_WORKER"]),
+        )
+        train_size += len(loader)
+        loaders.append(loader)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device=device).train()
     optimizer = op.Adam(model.parameters(), lr=1e-8)
     scheduler = _TwoCycleLR(optimizer=optimizer, total_steps=max_n_epochs * train_size)
     logging.info(f"using hardware {str(device).upper()}")
-    logging.debug(f"{model.check_parameter_number} trainable parameters")
+    n_param = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.debug(f"{n_param} trainable parameters")
     if load:
         with open(load, mode="rb") as sf:
             state_dic = torch.load(sf, map_location=device)
@@ -242,44 +263,40 @@ def train(
     logging.info("start training")
     for epoch in range(start_epoch, max_n_epochs):
         running_loss = 0.0
-        for key, d in enumerate(loader):
-            mol, label = d["mol"], d["label"]
-            for i in mol:
-                mol[i] = mol[i].to(device)
-            for j in label:
-                label[j] = label[j].to(device)
-            out = model(mol)
-            loss = loss_calculator(out, label, train_loss)
-            running_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            model.zero_grad(set_to_none=True)
-            # update scheduler after optimised
-            scheduler.step(step_idx=key + epoch * train_size)
+        for loader in loaders:
+            for key, d in enumerate(loader):
+                mol, label = d["mol"], d["label"]
+                for i in mol:
+                    mol[i] = mol[i].to(device)
+                for j in label:
+                    label[j] = label[j].to(device)
+                out = model(mol)
+                loss = loss_calculator(out, label, train_loss)
+                running_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+                model.zero_grad(set_to_none=True)
+                # update scheduler after optimised
+                scheduler.step(step_idx=key + epoch * train_size)
         logging.info(f"epoch: {epoch + 1} loss: {running_loss / train_size}")
         if save_every:
             if (epoch + 1) % save_every == 0:
-                state = {
-                    "nn": model.state_dict(),
-                    "opt": optimizer.state_dict(),
-                    "scheduler": scheduler.scheduler.state_dict(),
-                    "epoch": epoch + 1,
-                    "unit": unit,
-                }
+                nn_info["nn"] = model.state_dict()
+                nn_info["opt"] = optimizer.state_dict()
+                nn_info["scheduler"] = scheduler.scheduler.state_dict()
+                nn_info["epoch"] = epoch + 1
                 chkpt_idx = str(epoch + 1).zfill(len(str(max_n_epochs)))
-                torch.save(state, Path(work_dir) / f"state-{chkpt_idx}.pkl")
+                torch.save(nn_info, Path(work_dir) / f"state-{chkpt_idx}.pkl")
                 logging.info(f"saved checkpoint state-{chkpt_idx}.pkl")
-    torch.save(
-        {"nn": model.state_dict(), "unit": unit},
-        Path(work_dir) / r"trained.pt",
-    )
+    nn_info["nn"] = model.state_dict()
+    torch.save(nn_info, Path(work_dir) / r"trained.pt")
     logging.info("saved state!")
     logging.info("finished")
 
 
 def test(
     model: nn.Module,
-    dataset: Generator,
+    dataset: Iterable,
     load: Optional[str] = None,
     loss_calculator=scalar_vector_loss,
     metric_type: str = "MAE",

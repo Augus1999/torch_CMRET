@@ -6,6 +6,7 @@ Utils.
 from .ase_interface import CMRETCalculator
 from .dataset import ASEData, XYZData
 from .tools import (
+    DEFAULT_NN_INFO,
     scalar_vector_loss,
     scalar_loss,
     pretrain_loss,
@@ -20,6 +21,7 @@ __all__ = [
     "CMRETCalculator",
     "ASEData",
     "XYZData",
+    "DEFAULT_NN_INFO",
     "scalar_vector_loss",
     "scalar_loss",
     "pretrain_loss",

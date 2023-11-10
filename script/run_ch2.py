@@ -6,7 +6,7 @@ train and test on singlet/triplet CH2 dataset
 import argparse
 from pathlib import Path
 from cmret.utils import train, test, ASEData
-from cmret.representation import CMRETModel
+from cmret import CMRETModel
 
 
 root = Path(__file__).parent
@@ -29,10 +29,9 @@ def main():
 
     train(
         model=model,
-        dataset=dataset,
-        batch_size=args.batchsize,
+        datasets=[dataset],
+        batch_sizes=[args.batchsize],
         max_n_epochs=args.nepoch,
-        unit="eV",
         work_dir=workdir,
         log_dir=log_dir,
     )

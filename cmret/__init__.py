@@ -2,11 +2,11 @@
 # Author: Nianze A. Tao (Omozawa Sueno)
 """
 CMRET package.
-We haven't supported TorchScript yet.
+We have added supports for TorchScript!
 """
-from . import representation, utils
-from .models import trained_model
+from . import utils
+from .models import trained_model, CMRETModel
 
-__all__ = ["representation", "utils", "trained_model"]
+__all__ = ["CMRETModel", "utils", "trained_model"]
 __version__ = "1.0.0"
 __author__ = "Nianze A. Tao (Omozawa Sueno)"
