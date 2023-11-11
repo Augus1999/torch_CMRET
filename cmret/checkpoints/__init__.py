@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. TAO (Omozawa SUENO)
 """
-Defined NN model and pre-trained models.
+Pre-trained models.
 """
 from pathlib import Path
-from .representation import CMRETModel
+from ..model import CMRETModel
 
-pretrain = Path(__file__).parent / "checkpoints"
+pretrain = Path(__file__).parent
 names = {
     "md17": pretrain / "md17.pt",
     "coll": pretrain / "coll.pt",
@@ -27,4 +27,4 @@ def trained_model(name: str) -> CMRETModel:
         )
 
 
-__all__ = ["trained_model", "CMRETModel"]
+__all__ = ["trained_model"]

@@ -152,7 +152,7 @@ class CMRET(nn.Module):
             if average_attn_matrix_over_layers:
                 out["attn_matrix"] = torch.cat(attn, dim=0).mean(dim=0)
             else:
-                out["attn_matrix"] = torch.cat(attn, dim=0)#attn
+                out["attn_matrix"] = torch.cat(attn, dim=0)
         return out
 
 

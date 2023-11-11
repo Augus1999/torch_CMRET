@@ -44,7 +44,7 @@ class EquivariantScalar(nn.Module):
         out = {"scalar": y}
         if self.dy:
             # important for torch.jit
-            grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
+            grad_outputs: List[Optional[Tensor]] = [torch.ones_like(y)]
             dy = grad(
                 outputs=[y],
                 inputs=[r],

@@ -3,10 +3,9 @@
 """
 Define ASE calculator.
 """
-from typing import List, Dict, Union
+from typing import List
 import torch
 import torch.nn as nn
-from numpy import ndarray
 from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 
@@ -21,14 +20,13 @@ unit_factor = {r"Hartree": E_h, r"eV": E_eV, r"kcal/mol": E_kcal_mol}
 class CMRETCalculator(Calculator):
     implemented_properties = ["energy", "forces"]
 
-    def __init__(self, model: nn.Module, **kargv: str) -> None:
+    def __init__(self, model: nn.Module) -> None:
         """
         ASE calculator class wrapping CMRET model.
 
         :param model: a trained CMRET model
-        :param kargv: any argument (not in use)
         """
-        super().__init__(**kargv)
+        super().__init__()
         self.model = model
         self.device = next(model.parameters()).device
         if model.unit in unit_factor:
@@ -41,7 +39,7 @@ class CMRETCalculator(Calculator):
         atoms: Atoms,
         properties: List[str] = ["energy", "forces"],
         system_changes: List[str] = all_changes,
-    ) -> Dict[str, Union[float, ndarray]]:
+    ) -> None:
         """
         Calculate the properties.
 
