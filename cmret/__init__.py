@@ -5,7 +5,8 @@ CMRET package.
 We have added supports for TorchScript!
 """
 from . import utils
-from .models import trained_model, CMRETModel
+from .model import CMRETModel
+from .checkpoints import trained_model
 
 __all__ = ["CMRETModel", "utils", "trained_model"]
 __version__ = "1.0.0"
