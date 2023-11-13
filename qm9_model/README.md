@@ -1,7 +1,7 @@
 ## usage
 ```python
 from ase.io import read
-from cmret.representation import CMRETModel
+from cmret import CMRETModel
 
 model = CMRETModel.from_checkpoint("isotropic_polarizability.pt")
 atoms = read("your_mol.sdf")

@@ -7,6 +7,7 @@ import os
 import re
 import glob
 import logging
+from copy import deepcopy
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Union, Iterable, Callable
 import torch
@@ -281,13 +282,15 @@ def train(
         logging.info(f"epoch: {epoch + 1} loss: {running_loss / train_size}")
         if save_every:
             if (epoch + 1) % save_every == 0:
-                nn_info["nn"] = model.state_dict()
-                nn_info["opt"] = optimizer.state_dict()
-                nn_info["scheduler"] = scheduler.scheduler.state_dict()
-                nn_info["epoch"] = epoch + 1
+                chkpt = deepcopy(nn_info)
+                chkpt["nn"] = model.state_dict()
+                chkpt["opt"] = optimizer.state_dict()
+                chkpt["scheduler"] = scheduler.scheduler.state_dict()
+                chkpt["epoch"] = epoch + 1
                 chkpt_idx = str(epoch + 1).zfill(len(str(max_n_epochs)))
-                torch.save(nn_info, Path(work_dir) / f"state-{chkpt_idx}.pkl")
+                torch.save(chkpt, Path(work_dir) / f"state-{chkpt_idx}.pkl")
                 logging.info(f"saved checkpoint state-{chkpt_idx}.pkl")
+                del chkpt
     nn_info["nn"] = model.state_dict()
     torch.save(nn_info, Path(work_dir) / r"trained.pt")
     logging.info("saved state!")
