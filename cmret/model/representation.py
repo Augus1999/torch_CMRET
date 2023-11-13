@@ -183,8 +183,8 @@ class CMRETModel(nn.Module):
         :param output_mode: output properties
         """
         super().__init__()
-        dy = False
-        self.unit: Optional[str] = None
+        dy: bool = False
+        self.unit = None  # this parameter will be a 'str' after loading trained model
         if output_mode == "energy-force":
             out = EquivariantScalar(n_feature=n_atom_basis, n_output=n_output, dy=True)
             dy = True
