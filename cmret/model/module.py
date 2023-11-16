@@ -109,15 +109,11 @@ class Distance(nn.Module):
             vec_shift1 = r[:, :, None, :] - r_shift1[:, None, :, :]
             vec_shift2 = r[:, :, None, :] - r_shift2[:, None, :, :]
             vec_shift3 = r[:, :, None, :] - r_shift3[:, None, :, :]
-            d_0shift = torch.linalg.norm(vec, 2, -1).unsqueeze(0)
-            d_shift1 = torch.linalg.norm(vec_shift1, 2, -1).unsqueeze(0)
-            d_shift2 = torch.linalg.norm(vec_shift2, 2, -1).unsqueeze(0)
-            d_shift3 = torch.linalg.norm(vec_shift3, 2, -1).unsqueeze(0)
-            ds = torch.cat([d_0shift, d_shift1, d_shift2, d_shift3], dim=0)
             vecs = torch.cat([vec, vec_shift1, vec_shift2, vec_shift3], dim=0)
+            ds = torch.linalg.norm(vecs, 2, -1)
             d_min = torch.min(ds, dim=0)  # find min distances
-            d, d_key = d_min.values, d_min.indices
-            vec = torch.gather(vecs, 0, d_key[:, :, :, None].repeat(1, 1, 1, 3))
+            d, d_key = d_min.values[None, :, :], d_min.indices
+            vec = torch.gather(vecs, 0, d_key[None, :, :, None].repeat(1, 1, 1, 3))
             d_tril = torch.tril(d, -1)
             d_triu = torch.triu(d, 0).transpose(-2, -1)
             d_tri = torch.cat([d_tril.unsqueeze(0), d_triu.unsqueeze(0)], 0)
