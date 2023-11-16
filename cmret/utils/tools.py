@@ -65,65 +65,36 @@ class _TwoCycleLR:
             self.scheduler.last_epoch = -1
 
 
-def scalar_vector_loss(
+def loss_calc(
     out: Dict[str, Tensor],
     label: Dict[str, Tensor],
     loss_f: Callable[[Tensor, Tensor], Tensor],
     raw: bool = False,
-) -> Union[Tensor, Dict]:
+) -> Union[Tensor, Dict[str, Tensor]]:
     """
-    Claculate the scalar-vector loss
+    Calculate the scalar-vector loss/scalar loss/pretrain loss based on keys in label.
 
     :param out: output of model
     :param label: training set label
     :param loss_f: loss function
     :param raw: whether output raw losses
-    :return: scalar-vector loss
+    :return: calculated loss
     """
-    rho = 0.2
-    loss1 = loss_f(out["scalar"], label["scalar"])
-    loss2 = loss_f(out["vector"], label["vector"])
-    if raw:
-        return {"scalar": loss1, "vector": loss2}
-    loss = loss1 * rho + loss2 * (1 - rho)
-    return loss
-
-
-def scalar_loss(
-    out: Dict[str, Tensor],
-    label: Dict[str, Tensor],
-    loss_f: Callable[[Tensor, Tensor], Tensor],
-    raw: bool = False,
-) -> Union[Tensor, Dict]:
-    """
-    Claculate the scalar loss
-
-    :param out: output of model
-    :param label: training set label
-    :param loss_f: loss function
-    :param raw: whether output raw loss
-    :return: scalar loss
-    """
-    loss = loss_f(out["scalar"], label["scalar"])
-    if raw:
-        return {"scalar": loss}
-    return loss
-
-
-def pretrain_loss(
-    out: Dict[str, Tensor],
-    label: Dict[str, Tensor],
-    loss_f: Callable[[Tensor, Tensor], Tensor],
-) -> Tensor:
-    """
-    Claculate the pretrain loss
-
-    :param out: output of model
-    :param label: training set label
-    :param loss_f: loss function
-    :return: pre-train loss
-    """
-    return loss_f(out["v"], label["R"])
+    if "vector" in label:
+        rho = 0.2
+        loss1 = loss_f(out["scalar"], label["scalar"])
+        loss2 = loss_f(out["vector"], label["vector"])
+        if raw:
+            return {"scalar": loss1, "vector": loss2}
+        loss = loss1 * rho + loss2 * (1 - rho)
+        return loss
+    elif "R" in label:
+        return loss_f(out["v"], label["R"])
+    else:
+        loss = loss_f(out["scalar"], label["scalar"])
+        if raw:
+            return {"scalar": loss}
+        return loss
 
 
 def collate(batch: List) -> Dict[str, Tensor]:
@@ -196,7 +167,6 @@ def train(
     datasets: Union[List[Iterable], Tuple[Iterable]],
     batch_sizes: Union[List[int], Tuple[int]] = [5],
     max_n_epochs: int = 20000,
-    loss_calculator=scalar_vector_loss,
     nn_info: Dict[str, Union[str, int, float]] = DEFAULT_NN_INFO,
     load: Optional[str] = None,
     log_dir: Optional[str] = None,
@@ -210,7 +180,6 @@ def train(
     :param datasets: training set(s)
     :param batch_sizes: mini-batch size(s)
     :param max_n_epochs: max training epochs size
-    :param loss_calculator: loss calculator
     :param nn_info: neural network information
     :param load: load from an existence state file <file>
     :param log_dir: where to store log file <file>
@@ -272,7 +241,7 @@ def train(
                 for j in label:
                     label[j] = label[j].to(device)
                 out = model(mol)
-                loss = loss_calculator(out, label, train_loss)
+                loss = loss_calc(out, label, train_loss)
                 running_loss += loss.item()
                 loss.backward()
                 optimizer.step()
@@ -301,7 +270,6 @@ def test(
     model: nn.Module,
     dataset: Iterable,
     load: Optional[str] = None,
-    loss_calculator=scalar_vector_loss,
     metric_type: str = "MAE",
 ) -> Dict[str, float]:
     """
@@ -310,7 +278,6 @@ def test(
     :param model: model for testing
     :param dataset: dataset class
     :param load: load from an existence state file <file>
-    :param loss_calculator: loss calculator
     :param metric_type: chosen from 'MAE' and 'RMSE'
     :return: test metrics
     """
@@ -332,7 +299,7 @@ def test(
         for j in label:
             label[j] = label[j].to(device)
         out = model(mol)
-        result = loss_calculator(out, label, Loss, True)
+        result = loss_calc(out, label, Loss, True)
         for key in result:
             if key not in results:
                 results[key] = result[key].item()

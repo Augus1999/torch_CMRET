@@ -123,14 +123,11 @@ class CMRET(nn.Module):
         batch_mask = batch_mask_[None, :, :, None]  # shape: (1, n_a, n_a, 1)
         batch_mask_ = batch_mask_ == 0  # shape: (n_a, n_a)
         # ------------------------------------------------------------------------
-        d, d_vec = self.distance(r, batch_mask, loop_mask, lattice)
+        d, vec_norm = self.distance(r, batch_mask, loop_mask, lattice)
         cutoff = self.cutoff(d).unsqueeze(dim=-1)
         h = batch_mask.shape[1]
         cutoff *= batch_mask[loop_mask].view(1, h, h - 1, 1)
         e = self.rbf(d) * cutoff
-        d_vec_norm = (
-            d_vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
-        ).unsqueeze(dim=-1)
         attn = []
         for layer in self.interaction:
             s, o, v, _attn = layer(
@@ -138,7 +135,7 @@ class CMRET(nn.Module):
                 o=o,
                 v=v,
                 e=e,
-                d_vec_norm=d_vec_norm,
+                vec_norm=vec_norm,
                 mask=cutoff,
                 loop_mask=loop_mask,
                 batch_mask=batch_mask_,
