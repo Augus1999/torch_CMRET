@@ -27,10 +27,8 @@ class RBF1(nn.Module):
         :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
         :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
         """
-        out = (
-            torch.pi * self.offsets * d[:, :, :, None] / self.cell
-        ).sin() / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
-        return out
+        out = (torch.pi * self.offsets * d[:, :, :, None] / self.cell).sin()
+        return out / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
 
 
 class RBF2(nn.Module):
@@ -44,9 +42,8 @@ class RBF2(nn.Module):
         super().__init__()
         self.register_buffer("cell", torch.tensor([cell]))
         self.register_buffer("n_kernel", torch.tensor([n_kernel]))
-        offsets = torch.linspace((-self.cell).exp().item(), 1, n_kernel)[
-            None, None, None, :
-        ]
+        offsets = torch.linspace((-self.cell).exp().item(), 1, n_kernel)
+        offsets = offsets[None, None, None, :]
         coeff = ((1 - (-self.cell).exp()) / n_kernel).pow(-2) * torch.ones_like(offsets)
         self.offsets = nn.Parameter(offsets, requires_grad=True)
         self.coeff = nn.Parameter(coeff / 4, requires_grad=True)
@@ -99,12 +96,11 @@ class Distance(nn.Module):
         :param batch_mask: batch mask;    shape: (1, n_a, n_a, 1)
         :param loop_mask: loop mask;      shape: (1, n_a, n_a)
         :param lattice: lattice vectors;  shape: (1, n_a, 3, 3)
-        :return: d, d_vec;                shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3)
+        :return: d, vec_norm;             shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3)
         """
         n_b, n_a, _ = r.shape
-        d_vec = r[:, :, None, :] - r[:, None, :, :]
-        d_vec_ = d_vec * batch_mask  # reomve 'off-diagonal' elements
-        d_vec = d_vec_[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
+        vec = r[:, :, None, :] - r[:, None, :, :]
+        vec = vec * batch_mask  # reomve 'off-diagonal' elements
         if lattice is not None:
             # compute distances under periodic boundary conditions
             r_shift1 = r + lattice[::, ::, 0]
@@ -113,20 +109,28 @@ class Distance(nn.Module):
             vec_shift1 = r[:, :, None, :] - r_shift1[:, None, :, :]
             vec_shift2 = r[:, :, None, :] - r_shift2[:, None, :, :]
             vec_shift3 = r[:, :, None, :] - r_shift3[:, None, :, :]
-            d_0shift = torch.linalg.norm(d_vec_, 2, -1).unsqueeze(0)
-            d_shift1 = torch.linalg.norm(vec_shift1, 2, -1).unsqueeze(0)
-            d_shift2 = torch.linalg.norm(vec_shift2, 2, -1).unsqueeze(0)
-            d_shift3 = torch.linalg.norm(vec_shift3, 2, -1).unsqueeze(0)
-            ds = torch.cat([d_0shift, d_shift1, d_shift2, d_shift3], dim=0)
-            d_asy = torch.min(ds, dim=0).values  # min distances
-            d_tril = torch.tril(d_asy, -1)
-            d_triu = torch.triu(d_asy, 0).transpose(-2, -1)
+            vecs = torch.cat([vec, vec_shift1, vec_shift2, vec_shift3], dim=0)
+            ds = torch.linalg.norm(vecs, 2, -1)
+            d_min = torch.min(ds, dim=0)  # find min distances
+            d, d_key = d_min.values[None, :, :], d_min.indices
+            vec = torch.gather(vecs, 0, d_key[None, :, :, None].repeat(1, 1, 1, 3))
+            d_tril = torch.tril(d, -1)
+            d_triu = torch.triu(d, 0).transpose(-2, -1)
             d_tri = torch.cat([d_tril.unsqueeze(0), d_triu.unsqueeze(0)], 0)
-            d_tri = torch.min(d_tri, dim=0).values  # use symmetry
+            d_tri_min = torch.min(d_tri, dim=0)  # use symmetry
+            d_tri, d_key = d_tri_min.values, d_tri_min.indices
+            vec_tril = vec * (d_tril != 0).float().unsqueeze(-1)
+            vec_triu = (vec * (d_triu == 0).float().unsqueeze(-1)).transpose(-2, -3)
+            vec_tri = torch.cat([vec_tril, vec_triu], 0)
+            vec = torch.gather(vec_tri, 0, d_key[:, :, :, None].repeat(1, 1, 1, 3))
+            vec = vec - vec.transpose(-2, -3)
+            vec = vec[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
             d = (d_tri + d_tri.transpose(-2, -1))[loop_mask].view(1, n_a, n_a - 1)
         else:
-            d = torch.linalg.norm(d_vec, 2, -1)
-        return d, d_vec
+            vec = vec[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
+            d = torch.linalg.norm(vec, 2, -1)
+        vec_norm = vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
+        return d, vec_norm.unsqueeze(dim=-1)
 
 
 class ResML(nn.Module):
@@ -284,7 +288,7 @@ class Interaction(nn.Module):
         o: Tensor,
         v: Tensor,
         e: Tensor,
-        d_vec_norm: Tensor,
+        vec_norm: Tensor,
         mask: Tensor,
         loop_mask: Tensor,
         batch_mask: Tensor,
@@ -295,7 +299,7 @@ class Interaction(nn.Module):
         :param o: scale from pervious layer;  shape: (1, n_a, n_f)
         :param v: vector info;                shape: (1, n_a, 3, n_f)
         :param e: rbf extended distances;     shape: (1, n_a, n_a - 1, n_k)
-        :param d_vec_norm: normalised d_vec;  shape: (1, n_a, n_a - 1, 3, 1)
+        :param vec_norm: normalised vec;      shape: (1, n_a, n_a - 1, 3, 1)
         :param mask: neighbour mask;          shape: (1, n_a, n_a - 1, 1)
         :param loop_mask: self-loop mask;     shape: (1, n_a, n_a)
         :param batch_mask: batch mask;        shape: (n_a, n_a)
@@ -310,7 +314,7 @@ class Interaction(nn.Module):
         s_out = self.res(s_m) + o
         v = v[:, :, None, :, :]
         v_m = s_n3[:, :, None, :] * v3 + (
-            s2[:, :, :, None, :] * v + s3[:, :, :, None, :] * d_vec_norm
+            s2[:, :, :, None, :] * v + s3[:, :, :, None, :] * vec_norm
         ).sum(dim=-3)
         return s_m, s_out, v_m, attn_matrix
 
