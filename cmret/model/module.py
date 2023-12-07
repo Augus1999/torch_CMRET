@@ -80,7 +80,7 @@ class CosinCutOff(nn.Module):
 class Distance(nn.Module):
     def __init__(self) -> None:
         """
-        Compute pair-wise distances and dist_vec.
+        Compute pair-wise distances and normalised vectors.
         """
         super().__init__()
 
@@ -96,7 +96,7 @@ class Distance(nn.Module):
         :param batch_mask: batch mask;    shape: (1, n_a, n_a, 1)
         :param loop_mask: loop mask;      shape: (1, n_a, n_a)
         :param lattice: lattice vectors;  shape: (1, n_a, 3, 3)
-        :return: d, vec_norm;             shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3)
+        :return: d, vec_norm;             shape: (1, n_a, n_a - 1), (1, n_a, n_a - 1, 3, 1)
         """
         n_b, n_a, _ = r.shape
         vec = r[:, :, None, :] - r[:, None, :, :]

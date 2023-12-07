@@ -3,7 +3,7 @@
 """
 Define ASE calculator.
 """
-from typing import List
+from typing import List, Union
 import torch
 import torch.nn as nn
 from ase import Atoms
@@ -20,15 +20,18 @@ unit_factor = {r"Hartree": E_h, r"eV": E_eV, r"kcal/mol": E_kcal_mol}
 class CMRETCalculator(Calculator):
     implemented_properties = ["energy", "forces"]
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(
+        self, model: nn.Module, device: Union[str, torch.device] = "cpu"
+    ) -> None:
         """
         ASE calculator class wrapping CMRET model.
 
         :param model: a trained CMRET model
+        :param device: target device
         """
         super().__init__()
-        self.model = model
-        self.device = next(model.parameters()).device
+        self.model = model.to(device)
+        self.device = device
         if model.unit in unit_factor:
             self.scale = unit_factor[model.unit] / E_eV
         else:
@@ -68,7 +71,7 @@ class CMRETCalculator(Calculator):
         res = self.model(mol)
         results = {}
         results["energy"] = res["scalar"].detach().cpu().item() * self.scale
-        if self.model.model.dy:
+        if "vector" in res:
             results["forces"] = res["vector"][0].detach().cpu().numpy() * self.scale
         self.results = results
 
