@@ -187,9 +187,6 @@ def train(
     :param save_every: store checkpoint every 'save_every' epochs
     :return: None
     """
-    if os.path.exists(str(log_dir)):
-        with open(log_dir, mode="r+", encoding="utf-8") as f:
-            f.truncate()
     if not os.path.exists(work_dir):
         os.makedirs(work_dir)
     logging.basicConfig(
