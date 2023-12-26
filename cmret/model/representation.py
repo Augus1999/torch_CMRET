@@ -7,6 +7,7 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 from torch import Tensor
+from typing_extensions import Self
 from .embedding import Embedding
 from .output import (
     EquivariantDipoleMoment,
@@ -15,9 +16,6 @@ from .output import (
     ElectronicSpatial,
 )
 from .module import Interaction, Distance, CosinCutOff, RBF1, RBF2
-
-
-__all__ = ["CMRETModel"]
 
 
 class CMRET(nn.Module):
@@ -213,6 +211,17 @@ class CMRETModel(nn.Module):
             temperature_coeff=temperature_coeff,
             dy=dy,
         )
+        self.args = dict(
+            cutoff=cutoff,
+            n_kernel=n_kernel,
+            n_atom_basis=n_atom_basis,
+            n_interaction=n_interaction,
+            n_output=n_output,
+            rbf_type=rbf_type,
+            num_head=num_head,
+            temperature_coeff=temperature_coeff,
+            output_mode=output_mode,
+        )
 
     def forward(
         self,
@@ -239,23 +248,8 @@ class CMRETModel(nn.Module):
             average_attn_matrix_over_layers,
         )
 
-    @torch.jit.ignore
-    def pretrained(self, file: Optional[str]) -> nn.Module:
-        """
-        Load pre-trained weight.
-
-        :param file: model file name <file>
-        :return: model
-        """
-        if file:
-            with open(file, mode="rb") as f:
-                state_dict = torch.load(f, map_location="cpu")
-            self.load_state_dict(state_dict=state_dict["nn"])
-            self.unit = state_dict["unit"]
-        return self
-
     @classmethod
-    def from_checkpoint(cls, file: str) -> nn.Module:
+    def from_checkpoint(cls, file: str) -> Self:
         """
         Return the model from a checkpoint (with 'args' key stored).
 

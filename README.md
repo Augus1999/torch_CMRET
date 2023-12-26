@@ -11,6 +11,7 @@ CMRET provides spin (S) and/or molecular charge (Q) awared machine learning forc
 ```txt
 torch>=2.0.0
 ase>=3.22.0
+lightning>=2.1.2
 ```
 
 ## Usage

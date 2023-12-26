@@ -4,8 +4,6 @@
 Tools to train & test the model, extract info from log, and split dataset stored in xyz files.
 """
 import os
-import re
-import glob
 import logging
 from copy import deepcopy
 from pathlib import Path
@@ -69,32 +67,23 @@ def loss_calc(
     out: Dict[str, Tensor],
     label: Dict[str, Tensor],
     loss_f: Callable[[Tensor, Tensor], Tensor],
-    raw: bool = False,
-) -> Union[Tensor, Dict[str, Tensor]]:
+) -> Dict[str, Tensor]:
     """
-    Calculate the scalar-vector loss/scalar loss/pretrain loss based on keys in label.
+    Calculate the scalar/vector/pretrain loss based on key(s) in label.
 
     :param out: output of model
     :param label: training set label
     :param loss_f: loss function
-    :param raw: whether output raw losses
     :return: calculated loss
     """
+    loss: Dict[str, Tensor] = {}
+    if "scalar" in label:
+        loss["scalar"] = loss_f(out["scalar"], label["scalar"])
     if "vector" in label:
-        rho = 0.2
-        loss1 = loss_f(out["scalar"], label["scalar"])
-        loss2 = loss_f(out["vector"], label["vector"])
-        if raw:
-            return {"scalar": loss1, "vector": loss2}
-        loss = loss1 * rho + loss2 * (1 - rho)
-        return loss
-    elif "R" in label:
-        return loss_f(out["v"], label["R"])
-    else:
-        loss = loss_f(out["scalar"], label["scalar"])
-        if raw:
-            return {"scalar": loss}
-        return loss
+        loss["vector"] = loss_f(out["vector"], label["vector"])
+    if "R" in label:
+        loss["scalar"] = loss_f(out["v"], label["R"])
+    return loss
 
 
 def collate(batch: List) -> Dict[str, Tensor]:
@@ -263,87 +252,44 @@ def train(
     logging.info("finished")
 
 
-def test(
-    model: nn.Module,
-    dataset: Iterable,
-    load: Optional[str] = None,
-    metric_type: str = "MAE",
-) -> Dict[str, float]:
+def test(model: nn.Module, testdata: DataLoader) -> Dict[str, float]:
     """
     Test the trained network.
 
     :param model: model for testing
-    :param dataset: dataset class
-    :param load: load from an existence state file <file>
-    :param metric_type: chosen from 'MAE' and 'RMSE'
+    :param testdata: a `~torch.utils.data.DataLoader` instance containing test data
     :return: test metrics
     """
-    loader = DataLoader(dataset=dataset, batch_size=10, collate_fn=collate)
-    size = len(loader)
+    scalar_count, vector_count = 0, 0
+    scalar_mae, scalar_rmse = 0, 0
+    vector_mae, vector_rmse = 0, 0
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.pretrained(file=load).to(device=device).eval()
-    if metric_type == "MAE":
-        Loss = nn.L1Loss()
-    elif metric_type == "RMSE":
-        Loss = nn.MSELoss()
-    else:
-        raise NotImplementedError
+    model = model.to(device=device).eval()
     results = {}
-    for d in loader:
+    for d in testdata:
         mol, label = d["mol"], d["label"]
         for i in mol:
             mol[i] = mol[i].to(device)
         for j in label:
             label[j] = label[j].to(device)
         out = model(mol)
-        result = loss_calc(out, label, Loss, True)
-        for key in result:
-            if key not in results:
-                results[key] = result[key].item()
-            else:
-                results[key] += result[key].item()
-    for key in results:
-        results[key] = results[key] / size
-        if metric_type == "RMSE":
-            results[key] = results[key] ** 0.5
+        if "scalar" in label:
+            ds = (out["scalar"] - label["scalar"]).flatten()
+            scalar_count += len(ds)
+            scalar_mae += ds.abs().sum().item()
+            scalar_rmse += ds.pow(2).sum().item()
+        if "vector" in label:
+            dv = (out["vector"] - label["vector"]).flatten()
+            vector_count += len(dv)
+            vector_mae += dv.abs().sum().item()
+            vector_rmse += dv.pow(2).sum().item()
+    if scalar_count != 0:
+        results["scalar_MAE"] = scalar_mae / scalar_count
+        results["scalar_RMSE"] = (scalar_rmse / scalar_count) ** 0.5
+    if vector_count != 0:
+        results["vector_MAE"] = vector_mae / vector_count
+        results["vector_RMSE"] = (vector_rmse / vector_count) ** 0.5
     return results
-
-
-def find_recent_checkpoint(workdir: str) -> Optional[str]:
-    """
-    Find the most recent checkpoint file in the work dir. \n
-    The name of checkpoint file is like state-abcdef.pkl
-
-    :param workdir: the directory where the checkpoint files stored <path>
-    :return: the file name
-    """
-    load: Optional[str] = None
-    if os.path.exists(workdir):
-        cps = list(glob.glob(str(Path(workdir) / r"*.pkl")))
-        if cps:
-            cps.sort(key=lambda x: int(os.path.basename(x).split(".")[0].split("-")[1]))
-            load = cps[-1]
-    return load
-
-
-def extract_log_info(log_name: str = "training.log") -> Dict[str, List]:
-    """
-    Extract training loss from training log file.
-
-    :param log_name: log file name <file>
-    :return: dict["epoch": epochs, "loss": loss]
-    """
-    info = {"epoch": [], "loss": []}
-    with open(log_name, mode="r", encoding="utf-8") as f:
-        lines = f.read()
-    loss_info = re.findall(r"epoch: (\d+) loss: (\d+(.\d+(e|E)?(-|\+)?\d+)?)", lines)
-    if loss_info:
-        for i in loss_info:
-            epoch = int(i[0])
-            loss = float(i[1])
-            info["epoch"].append(epoch)
-            info["loss"].append(loss)
-    return info
 
 
 def split_data(
