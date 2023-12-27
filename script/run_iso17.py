@@ -86,6 +86,16 @@ def main():
         gradient_clip_val=5.0,
         gradient_clip_algorithm="value",
     )
+    earlystop_callback = EarlyStopping(monitor="val_loss", patience=60)
+    trainer = Trainer(
+        max_epochs=args.nepoch,
+        log_every_n_steps=20,
+        default_root_dir=log_dir,
+        callbacks=[ckpt_callback, earlystop_callback],
+    )
+
+    trainer.fit(lightning_model, traindata, valdata)
+    lightning_model.export_model(workdir)
 
     trainer.fit(lightning_model, traindata, valdata)
     lightning_model.export_model(workdir)
