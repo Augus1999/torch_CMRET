@@ -87,13 +87,7 @@ class CMRET4Training(LightningModule):
                 val_loss = 0.2 * val_scalar_loss + 0.8 * val_vector_loss
                 self.log("val_loss", val_loss, batch_size=nb)
             elif "scalar" in val_loss_dict:
-                val_scalar_loss = val_loss_dict["scalar"].item()
-                if self.val_scalar_loss is None:
-                    self.val_scalar_loss = val_scalar_loss
-                else:
-                    val_scalar_loss = a * val_scalar_loss + b * self.val_scalar_loss
-                    self.val_scalar_loss = val_scalar_loss
-                self.log("val_loss", val_scalar_loss, batch_size=nb)
+                self.log("val_loss", val_loss_dict["scalar"].item(), batch_size=nb)
             elif "vector" in val_loss_dict:
                 self.log("val_loss", val_loss_dict["vector"].item(), batch_size=nb)
 
