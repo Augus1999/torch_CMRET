@@ -1,66 +1,14 @@
 # -*- coding: utf-8 -*-
 # Author: Nianze A. TAO (Omozawa SUENO)
 """
-Tools to train & test the model, extract info from log, and split dataset stored in xyz files.
+Tools to test the model, and split dataset stored in xyz files.
 """
-import os
-import logging
-from copy import deepcopy
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Union, Iterable, Callable
+from typing import List, Dict, Union, Callable
 import torch
 import torch.nn as nn
-import torch.optim as op
 from torch import Tensor
 from torch.utils.data import DataLoader
-
-# set 'num_workers' varibale in torch.utils.data.DataLoader
-os.environ["NUM_WORKER"] = "4"
-if hasattr(os, "sched_getaffinity"):
-    os.environ["NUM_WORKER"] = f"{len(os.sched_getaffinity(0))}"
-
-
-DEFAULT_NN_INFO = {
-    "args": {
-        "cutoff": 5.0,
-        "n_kernel": 50,
-        "n_atom_basis": 128,
-        "n_interaction": 6,
-        "n_output": 2,
-        "rbf_type": "gaussian",
-        "num_head": 4,
-        "temperature_coeff": 2.0,
-        "output_mode": "energy-force",
-    },
-    "unit": "eV",
-}
-
-
-class _TwoCycleLR:
-    def __init__(self, optimizer, total_steps: int, step_size_up: int = 100000) -> None:
-        self.total_steps = total_steps
-        self.step_size_up = step_size_up
-        self.scheduler = op.lr_scheduler.CyclicLR(
-            optimizer=optimizer,
-            base_lr=1e-6,
-            max_lr=1e-4,
-            step_size_up=step_size_up,
-            step_size_down=total_steps // 2 - step_size_up,
-            cycle_momentum=False,
-        )
-
-    def step(self, step_idx: int) -> None:
-        self.scheduler.step()
-        if step_idx == self.total_steps // 2 - 1:
-            self.scheduler = op.lr_scheduler.CyclicLR(
-                optimizer=self.scheduler.optimizer,
-                base_lr=1e-8,
-                max_lr=1e-6,
-                step_size_up=self.step_size_up,
-                step_size_down=self.total_steps // 2 - self.step_size_up - 2,
-                cycle_momentum=False,
-            )
-            self.scheduler.last_epoch = -1
 
 
 def loss_calc(
@@ -82,7 +30,7 @@ def loss_calc(
     if "vector" in label:
         loss["vector"] = loss_f(out["vector"], label["vector"])
     if "R" in label:
-        loss["scalar"] = loss_f(out["v"], label["R"])
+        loss["vector"] = loss_f(out["R"], label["R"])
     return loss
 
 
@@ -149,107 +97,6 @@ def collate(batch: List) -> Dict[str, Tensor]:
     if coords:
         label["R"] = torch.cat(coords, dim=0).unsqueeze(dim=0)
     return {"mol": mol, "label": label}
-
-
-def train(
-    model: nn.Module,
-    datasets: Union[List[Iterable], Tuple[Iterable]],
-    batch_sizes: Union[List[int], Tuple[int]] = [5],
-    max_n_epochs: int = 20000,
-    nn_info: Dict[str, Union[str, int, float]] = DEFAULT_NN_INFO,
-    load: Optional[str] = None,
-    log_dir: Optional[str] = None,
-    work_dir: str = ".",
-    save_every: Optional[int] = None,
-) -> None:
-    """
-    Trian the network.
-
-    :param model: model for training
-    :param datasets: training set(s)
-    :param batch_sizes: mini-batch size(s)
-    :param max_n_epochs: max training epochs size
-    :param nn_info: neural network information
-    :param load: load from an existence state file <file>
-    :param log_dir: where to store log file <file>
-    :param work_dir: where to store model state_dict <path>
-    :param save_every: store checkpoint every 'save_every' epochs
-    :return: None
-    """
-    if not os.path.exists(work_dir):
-        os.makedirs(work_dir)
-    logging.basicConfig(
-        filename=log_dir,
-        format=" %(asctime)s %(levelname)s: %(message)s",
-        level=logging.DEBUG,
-    )
-    start_epoch: int = 0
-    loaders: List = []
-    train_size: int = 0
-    for dataset_idx, dataset in enumerate(datasets):
-        loader = DataLoader(
-            dataset=dataset,
-            batch_size=batch_sizes[dataset_idx],
-            collate_fn=collate,
-            shuffle=True,
-            num_workers=int(os.environ["NUM_WORKER"]),
-        )
-        train_size += len(loader)
-        loaders.append(loader)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device=device).train()
-    optimizer = op.Adam(model.parameters(), lr=1e-8)
-    scheduler = _TwoCycleLR(optimizer=optimizer, total_steps=max_n_epochs * train_size)
-    logging.info(f"using hardware {str(device).upper()}")
-    n_param = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logging.debug(f"{n_param} trainable parameters")
-    if load:
-        with open(load, mode="rb") as sf:
-            state_dic = torch.load(sf, map_location=device)
-        keys = {"nn", "opt", "epoch", "scheduler"}
-        if keys & set(state_dic.keys()) == keys:
-            model.load_state_dict(state_dict=state_dic["nn"])
-            scheduler.scheduler.load_state_dict(state_dict=state_dic["scheduler"])
-            start_epoch: int = state_dic["epoch"]
-            optimizer.load_state_dict(state_dict=state_dic["opt"])
-        else:
-            model.load_state_dict(state_dict=state_dic["nn"])
-        logging.info(f'loaded state from "{load}"')
-    train_loss = nn.MSELoss()
-    logging.info("start training")
-    for epoch in range(start_epoch, max_n_epochs):
-        running_loss = 0.0
-        for loader in loaders:
-            for key, d in enumerate(loader):
-                mol, label = d["mol"], d["label"]
-                for i in mol:
-                    mol[i] = mol[i].to(device)
-                for j in label:
-                    label[j] = label[j].to(device)
-                out = model(mol)
-                loss = loss_calc(out, label, train_loss)
-                running_loss += loss.item()
-                loss.backward()
-                optimizer.step()
-                model.zero_grad(set_to_none=True)
-                # update scheduler after optimised
-                scheduler.step(step_idx=key + epoch * train_size)
-        logging.info(f"epoch: {epoch + 1} loss: {running_loss / train_size}")
-        if save_every:
-            if (epoch + 1) % save_every == 0:
-                chkpt = deepcopy(nn_info)
-                chkpt["nn"] = model.state_dict()
-                chkpt["opt"] = optimizer.state_dict()
-                chkpt["scheduler"] = scheduler.scheduler.state_dict()
-                chkpt["epoch"] = epoch + 1
-                chkpt_idx = str(epoch + 1).zfill(len(str(max_n_epochs)))
-                torch.save(chkpt, Path(work_dir) / f"state-{chkpt_idx}.pkl")
-                logging.info(f"saved checkpoint state-{chkpt_idx}.pkl")
-                del chkpt
-    nn_info["nn"] = model.state_dict()
-    torch.save(nn_info, Path(work_dir) / r"trained.pt")
-    logging.info("saved state!")
-    logging.info("finished")
 
 
 def test(model: nn.Module, testdata: DataLoader) -> Dict[str, float]:

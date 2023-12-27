@@ -4,7 +4,16 @@
 Utils.
 """
 from .ase_interface import CMRETCalculator
-from .dataset import ASEData, XYZData
+from .dataset import ASEData, XYZData, ASEDataBaseClass, XYZDataBaseClass
 from .tools import collate, test, split_data
 
-__all__ = ["CMRETCalculator", "ASEData", "XYZData", "collate", "test", "split_data"]
+__all__ = [
+    "CMRETCalculator",
+    "ASEData",
+    "XYZData",
+    "ASEDataBaseClass",
+    "XYZDataBaseClass",
+    "collate",
+    "test",
+    "split_data",
+]

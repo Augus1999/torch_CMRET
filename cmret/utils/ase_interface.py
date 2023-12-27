@@ -9,7 +9,6 @@ import torch.nn as nn
 from ase import Atoms
 from ase.calculators.calculator import Calculator, all_changes
 
-k_B = 1.380649e-23  #         Boltzmann contant in J/K
 E_h = 4.3597447222071e-18  #  Hartree energy in J
 E_eV = 1.602177e-19  #        eV energy in J
 E_kcal_mol = 6.9477e-21  #    kcal/mol energy in J
@@ -70,7 +69,8 @@ class CMRETCalculator(Calculator):
             mol["Q"] = torch.tensor([[charge]], dtype=torch.float32, device=self.device)
         res = self.model(mol)
         results = {}
-        results["energy"] = res["scalar"].detach().cpu().item() * self.scale
+        if "scalar" in res:
+            results["energy"] = res["scalar"].detach().cpu().item() * self.scale
         if "vector" in res:
             results["forces"] = res["vector"][0].detach().cpu().numpy() * self.scale
         self.results = results

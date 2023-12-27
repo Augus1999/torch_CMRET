@@ -24,7 +24,7 @@ See examples:
 [running molecular dynamic simulation](script/molecular_dynamics.py)
 
 ## Known issue
-* Compiling a model to TorchScript Module for MD simulation (ASE-based) will lead to _RuntimeError_.
+* Using a compiled TorchScript Module for MD simulation (ASE-based) will lead to _RuntimeError_.
 
 ## Cite
 ```bibtex

@@ -55,7 +55,7 @@ class EquivariantScalar(nn.Module):
             if dy is not None:
                 out["vector"] = -dy
         if self.return_v:
-            out["v"] = v.mean(dim=-1) + r
+            out["R"] = v.mean(dim=-1) + r
         return out
 
 
