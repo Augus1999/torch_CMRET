@@ -3,8 +3,7 @@
 """
 DataSets classes.
 
-The item returned from these classes is a python 
-dictionary: {"mol": mol_dict, "label": label_dict},
+The item returned from these classes is dict instance: {"mol": mol_dict, "label": label_dict},
 where mol_dict is a dictionary as {
                                     "Z": nuclear charges (Tensor), 
                                     "R": atomic positions (Tensor),
@@ -25,11 +24,12 @@ from torch import Tensor
 from torch.utils import data
 
 
-class ASEData(data.Dataset):
+class ASEDataBaseClass(data.Dataset):
     def __init__(
         self,
         file: str,
         limit: Optional[int] = None,
+        idx_file: Optional[str] = None,
         task: Optional[str] = None,
         use_pbc: bool = False,
     ) -> None:
@@ -38,6 +38,7 @@ class ASEData(data.Dataset):
 
         :param file: dataset file name <file>
         :param limit: item limit
+        :param idx_file: index file name <file>
         :param task: task name
         :param use_pbc: whether to apply PBC in a cell
         """
@@ -47,13 +48,59 @@ class ASEData(data.Dataset):
         self.data = list(data)
         self.task = task
         self.use_pbc = use_pbc
+        self.idx = []
+        if idx_file:
+            with open(idx_file, "r") as f:
+                idx = f.readlines()
+            self.idx = [int(i) - 1 for i in idx]
 
     def __len__(self):
-        return len(self.data)
+        length = len(self.data)
+        if self.idx:
+            idx_length = len(self.idx)
+            length = min((length, idx_length))
+        return length
 
+
+class XYZDataBaseClass(data.Dataset):
+    def __init__(
+        self,
+        file: str,
+        limit: Optional[int] = None,
+        idx_file: Optional[str] = None,
+        use_pbc: bool = False,
+    ) -> None:
+        """
+        Dataset stored in extend xyz file.
+
+        :param file: dataset file name <file>
+        :param limit: item limit
+        :param idx_file: index file name <file>
+        :param use_pbc: whether to apply PBC in a cell
+        """
+        super().__init__()
+        self.data = read(file, index=f":{limit if limit else ''}")
+        self.use_pbc = use_pbc
+        self.idx = []
+        if idx_file:
+            with open(idx_file, "r") as f:
+                idx = f.readlines()
+            self.idx = [int(i) - 1 for i in idx]
+
+    def __len__(self):
+        length = len(self.data)
+        if self.idx:
+            idx_length = len(self.idx)
+            length = min((length, idx_length))
+        return length
+
+
+class ASEData(ASEDataBaseClass):
     def __getitem__(self, idx: Union[int, Tensor]) -> Dict[str, Dict[str, Tensor]]:
         if torch.is_tensor(idx):
             idx = idx.tolist()
+        if self.idx:
+            idx = self.idx[idx]
         d = self.data[idx]
         charges = torch.tensor(d.numbers, dtype=torch.long)
         positions = torch.tensor(d.positions, dtype=torch.float32)
@@ -78,30 +125,12 @@ class ASEData(data.Dataset):
         return {"mol": mol, "label": label}
 
 
-class XYZData(data.Dataset):
-    def __init__(
-        self,
-        file: str,
-        limit: Optional[int] = None,
-        use_pbc: bool = False,
-    ) -> None:
-        """
-        Dataset stored in extend xyz file.
-
-        :param file: dataset file name <file>
-        :param limit: item limit
-        :param use_pbc: whether to apply PBC in a cell
-        """
-        super().__init__()
-        self.data = read(file, index=f":{limit if limit else ''}")
-        self.use_pbc = use_pbc
-
-    def __len__(self):
-        return len(self.data)
-
+class XYZData(XYZDataBaseClass):
     def __getitem__(self, idx: Union[int, Tensor]) -> Dict[str, Dict[str, Tensor]]:
         if torch.is_tensor(idx):
             idx = idx.tolist()
+        if self.idx:
+            idx = self.idx[idx]
         d = self.data[idx]
         charges = torch.tensor(d.numbers, dtype=torch.long)
         positions = torch.tensor(d.positions, dtype=torch.float32)

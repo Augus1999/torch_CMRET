@@ -5,11 +5,23 @@ train and test on singlet/triplet CH2 dataset
 """
 import argparse
 from pathlib import Path
-from cmret.utils import train, test, ASEData
-from cmret import CMRETModel
+from torch.utils.data import DataLoader
+from lightning import Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
+from cmret.utils import test, ASEData, collate
+from cmret import CMRETModel, CMRET4Training
 
 
 root = Path(__file__).parent
+lightning_model_hparam = {
+    "model_unit": "eV",
+    "lr_scheduler_factor": 0.8,
+    "lr_scheduler_patience": 50,
+    "lr_scheduler_interval": "epoch",
+    "lr_scheduler_frequency": 1,
+    "lr_warnup_step": 1000,
+}
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -22,22 +34,38 @@ def main():
     args = parser.parse_args()
 
     workdir = root / "chkpts/ch2"
-    log_dir = root / "logs/ch2.log"
+    log_dir = root / "logs"
 
-    dataset = ASEData(f"{args.folder}/ch2_2000_train.db")
-    model = CMRETModel(n_interaction=args.nlayer, rbf_type=args.rbf, num_head=args.nh, n_kernel=20)
+    train_set = ASEData(f"{args.folder}/ch2_2000_train.db")
+    traindata = DataLoader(
+        train_set,
+        args.batchsize,
+        True,
+        num_workers=4,
+        collate_fn=collate,
+        persistent_workers=True,
+    )
+    test_set = ASEData(f"{args.folder}/ch2_2000_test.db")
+    testdata = DataLoader(test_set, 20, collate_fn=collate)
 
-    train(
-        model=model,
-        datasets=[dataset],
-        batch_sizes=[args.batchsize],
-        max_n_epochs=args.nepoch,
-        work_dir=workdir,
-        log_dir=log_dir,
+    model = CMRETModel(
+        n_interaction=args.nlayer, rbf_type=args.rbf, num_head=args.nh, n_kernel=20
+    )
+    lightning_model = CMRET4Training(model, lightning_model_hparam)
+
+    ckpt_callback = ModelCheckpoint(dirpath=workdir, monitor="val_loss")
+    earlystop_callback = EarlyStopping(monitor="val_loss", patience=60)
+    trainer = Trainer(
+        max_epochs=args.nepoch,
+        log_every_n_steps=20,
+        default_root_dir=log_dir,
+        callbacks=[ckpt_callback, earlystop_callback],
     )
 
-    test_set = ASEData(f"{args.folder}/ch2_2000_test.db")
-    test_info = test(model=model, dataset=test_set, load=workdir / "trained.pt")
+    trainer.fit(lightning_model, traindata, testdata)
+    lightning_model.export_model(workdir)
+
+    test_info = test(model=model, testdata=testdata)
     print("CH2:", test_info)
 
 

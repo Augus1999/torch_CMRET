@@ -11,6 +11,7 @@ CMRET provides spin (S) and/or molecular charge (Q) awared machine learning forc
 ```txt
 torch>=2.0.0
 ase>=3.22.0
+lightning>=2.1.2
 ```
 
 ## Usage
@@ -23,7 +24,7 @@ See examples:
 [running molecular dynamic simulation](script/molecular_dynamics.py)
 
 ## Known issue
-* Compiling a model to TorchScript Module for MD simulation (ASE-based) will lead to _RuntimeError_.
+* Using a compiled TorchScript Module for MD simulation (ASE-based) will lead to _RuntimeError_.
 
 ## Cite
 ```bibtex

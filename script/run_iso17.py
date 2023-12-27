@@ -5,53 +5,28 @@ train and test on ISO17 dataset
 """
 import argparse
 from pathlib import Path
-from typing import Optional, Dict, Union
-from ase.db import connect
+from typing import Dict, Union
 import torch
 from torch import Tensor
-from torch.utils import data
-from cmret.utils import train, test, find_recent_checkpoint
-from cmret import CMRETModel
+from torch.utils.data import DataLoader
+from lightning import Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
+from cmret.utils import test, ASEDataBaseClass, collate
+from cmret import CMRETModel, CMRET4Training
 
 
 root = Path(__file__).parent
+lightning_model_hparam = {
+    "model_unit": "eV",
+    "lr_scheduler_factor": 0.8,
+    "lr_scheduler_patience": 50,
+    "lr_scheduler_interval": "step",
+    "lr_scheduler_frequency": 5000,
+    "lr_warnup_step": 1000,
+}
 
-# you can set 'num_workers' varibale in torch.utils.data.DataLoader
-# by un-commentting the following:
-# import os
-# os.environ["NUM_WORKER"] = "x"  # here 'x' is the number of workers you want 
 
-
-class ASEData(data.Dataset):
-    def __init__(
-        self,
-        file: str,
-        idx_file: Optional[str] = None,
-        limit: Optional[int] = None,
-    ) -> None:
-        """
-        Dataset stored in sql via ASE.
-
-        :param file: dataset file name <file>
-        :param limit: item limit
-        """
-        super().__init__()
-        with connect(file) as db:
-            data = db.select(limit=limit)
-        self.data = list(data)
-        self.idx = []
-        if idx_file:
-            with open(idx_file, "r") as f:
-                idx = f.readlines()
-            self.idx = [int(i) - 1 for i in idx]
-
-    def __len__(self):
-        length = len(self.data)
-        if self.idx:
-            length_ = len(self.idx)
-            length = min((length, length_))
-        return length
-
+class ASEData(ASEDataBaseClass):
     def __getitem__(self, idx: Union[int, Tensor]) -> Dict[str, Dict[str, Tensor]]:
         if torch.is_tensor(idx):
             idx = idx.tolist()
@@ -78,28 +53,48 @@ def main():
     args = parser.parse_args()
 
     workdir = root / "chkpts/iso17"
-    log_dir = root / "logs/iso17.log"
-    load = find_recent_checkpoint(workdir=workdir)
+    log_dir = root / "logs"
 
-    dataset = ASEData(f"{args.folder}/reference.db", f"{args.folder}/train_ids.txt")
+    trainset = ASEData(
+        f"{args.folder}/reference.db", idx_file=f"{args.folder}/train_ids.txt"
+    )
+    valset = ASEData(
+        f"{args.folder}/reference.db", idx_file=f"{args.folder}/validation_ids.txt"
+    )
+    traindata = DataLoader(
+        trainset,
+        args.batchsize,
+        True,
+        num_workers=4,
+        collate_fn=collate,
+        persistent_workers=True,
+    )
+    valdata = DataLoader(valset, args.batchsize, num_workers=4, collate_fn=collate)
+
     model = CMRETModel(n_interaction=args.nlayer, rbf_type=args.rbf, num_head=args.nh)
+    lightning_model = CMRET4Training(model, lightning_model_hparam)
 
-    train(
-        model=model,
-        datasets=[dataset],
-        batch_sizes=[args.batchsize],
-        max_n_epochs=args.nepoch,
-        load=load,
-        save_every=10,
-        work_dir=workdir,
-        log_dir=log_dir,
+    ckpt_callback = ModelCheckpoint(
+        dirpath=workdir, monitor="val_loss", every_n_epochs=10
+    )
+    earlystop_callback = EarlyStopping(monitor="val_loss", patience=60)
+    trainer = Trainer(
+        max_epochs=args.nepoch,
+        log_every_n_steps=20,
+        default_root_dir=log_dir,
+        callbacks=[ckpt_callback, earlystop_callback],
     )
 
+    trainer.fit(lightning_model, traindata, valdata)
+    lightning_model.export_model(workdir)
+
     test_within = ASEData(f"{args.folder}/test_within.db")
+    test_within = DataLoader(test_within, 20, collate_fn=collate)
     test_other = ASEData(f"{args.folder}/test_other.db")
-    info_within = test(model=model, dataset=test_within, load=workdir / "trained.pt")
+    test_other = DataLoader(test_other, 20, collate_fn=collate)
+    info_within = test(model=model, dataset=test_within)
     print("ISO17: within", info_within)
-    info_other = test(model=model, dataset=test_other, load=workdir / "trained.pt")
+    info_other = test(model=model, dataset=test_other)
     print("ISO17: other", info_other)
 
 
