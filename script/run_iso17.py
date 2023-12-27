@@ -22,7 +22,9 @@ lightning_model_hparam = {
     "lr_scheduler_patience": 50,
     "lr_scheduler_interval": "step",
     "lr_scheduler_frequency": 5000,
-    "lr_warnup_step": 1000,
+    "lr_warnup_step": 10000,
+    "max_lr": 1e-3,
+    "ema_alpha": 0.05,
 }
 
 
@@ -74,8 +76,15 @@ def main():
     model = CMRETModel(n_interaction=args.nlayer, rbf_type=args.rbf, num_head=args.nh)
     lightning_model = CMRET4Training(model, lightning_model_hparam)
 
-    ckpt_callback = ModelCheckpoint(
-        dirpath=workdir, monitor="val_loss", every_n_epochs=10
+    ckpt_callback = ModelCheckpoint(dirpath=workdir, monitor="val_loss")
+    earlystop_callback = EarlyStopping(monitor="val_loss", patience=60)
+    trainer = Trainer(
+        max_epochs=args.nepoch,
+        log_every_n_steps=1000,
+        default_root_dir=log_dir,
+        callbacks=[ckpt_callback, earlystop_callback],
+        gradient_clip_val=5.0,
+        gradient_clip_algorithm="value",
     )
     earlystop_callback = EarlyStopping(monitor="val_loss", patience=60)
     trainer = Trainer(
@@ -84,6 +93,9 @@ def main():
         default_root_dir=log_dir,
         callbacks=[ckpt_callback, earlystop_callback],
     )
+
+    trainer.fit(lightning_model, traindata, valdata)
+    lightning_model.export_model(workdir)
 
     trainer.fit(lightning_model, traindata, valdata)
     lightning_model.export_model(workdir)

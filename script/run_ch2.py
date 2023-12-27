@@ -16,10 +16,12 @@ root = Path(__file__).parent
 lightning_model_hparam = {
     "model_unit": "eV",
     "lr_scheduler_factor": 0.8,
-    "lr_scheduler_patience": 50,
+    "lr_scheduler_patience": 30,
     "lr_scheduler_interval": "epoch",
     "lr_scheduler_frequency": 1,
     "lr_warnup_step": 1000,
+    "max_lr": 1e-3,
+    "ema_alpha": 0.05,
 }
 
 
@@ -60,6 +62,8 @@ def main():
         log_every_n_steps=20,
         default_root_dir=log_dir,
         callbacks=[ckpt_callback, earlystop_callback],
+        gradient_clip_val=5.0,
+        gradient_clip_algorithm="value",
     )
 
     trainer.fit(lightning_model, traindata, testdata)
