@@ -44,6 +44,7 @@ class CMRET4Training(LightningModule):
         self.cmret = cmret
         self.mse_fn = nn.MSELoss()
         self.mae_fn = nn.L1Loss()
+        self.scalar_loss: Optional[float] = None
         self.val_scalar_loss: Optional[float] = None
         self.save_hyperparameters(hparam)
         self.cmret.unit = hparam["model_unit"]
@@ -54,9 +55,18 @@ class CMRET4Training(LightningModule):
         out = self.cmret.forward(mol)
         loss_dict = loss_calc(out, label, self.mse_fn)
         if "scalar" in loss_dict and "vector" in loss_dict:
-            loss = 0.2 * loss_dict["scalar"] + 0.8 * loss_dict["vector"]
-            self.log("train_scalar_loss", loss_dict["scalar"].item(), batch_size=nb)
-            self.log("train_vector_loss", loss_dict["vector"].item(), batch_size=nb)
+            a = self.hparams.ema_alpha
+            b = 1 - a
+            scalar_loss = loss_dict["scalar"]
+            vector_loss = loss_dict["vector"]
+            if self.scalar_loss is None:
+                self.scalar_loss = scalar_loss.item()
+            else:
+                scalar_loss = a * scalar_loss + b * self.scalar_loss
+                self.scalar_loss = scalar_loss.item()
+            loss = 0.2 * scalar_loss + 0.8 * vector_loss
+            self.log("train_scalar_loss", scalar_loss.item(), batch_size=nb)
+            self.log("train_vector_loss", vector_loss.item(), batch_size=nb)
         elif "scalar" in loss_dict:
             loss = loss_dict["scalar"]
             self.log("train_scalar_loss", loss.item(), batch_size=nb)
@@ -66,8 +76,6 @@ class CMRET4Training(LightningModule):
         return loss
 
     def validation_step(self, batch: Dict[str, Dict[str, Tensor]]) -> None:
-        a = self.hparams.ema_alpha
-        b = 1 - a
         mol, label = batch["mol"], batch["label"]
         nb = mol["batch"].shape[0]
         enable_grad = False
@@ -77,6 +85,8 @@ class CMRET4Training(LightningModule):
             out = self.cmret.forward(mol)
             val_loss_dict = loss_calc(out, label, self.mae_fn)
             if "scalar" in val_loss_dict and "vector" in val_loss_dict:
+                a = self.hparams.ema_alpha
+                b = 1 - a
                 val_scalar_loss = val_loss_dict["scalar"].item()
                 val_vector_loss = val_loss_dict["vector"].item()
                 if self.val_scalar_loss is None:
@@ -92,7 +102,7 @@ class CMRET4Training(LightningModule):
                 self.log("val_loss", val_loss_dict["vector"].item(), batch_size=nb)
 
     def configure_optimizers(self) -> Dict:
-        optimizer = Adam(self.parameters(), self.hparams.max_lr, amsgrad=False)
+        optimizer = Adam(self.parameters(), 1e-8, amsgrad=False)
         scheduler = ReduceLROnPlateau(
             optimizer,
             "min",
