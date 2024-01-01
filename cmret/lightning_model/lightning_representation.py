@@ -4,7 +4,7 @@
 Lightning wrapper of CMRET model.
 """
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from lightning import LightningModule
 import torch
 import torch.nn as nn
@@ -15,13 +15,13 @@ from ..model import CMRETModel
 from ..utils.tools import loss_calc
 
 
-DEFAULT_HPARAM = {
+DEFAULT_HPARAM: Dict[str, Union[str, int, float]] = {
     "model_unit": "Hartree",
-    "lr_scheduler_factor": 0.8,
-    "lr_scheduler_patience": 30,
+    "lr_scheduler_factor": 0.9,
+    "lr_scheduler_patience": 50,
     "lr_scheduler_interval": "epoch",  # can be "step" as well
     "lr_scheduler_frequency": 1,
-    "lr_warnup_step": 1000,
+    "lr_warnup_step": 10000,
     "max_lr": 1e-3,
     "ema_alpha": 0.05,  # EMA alpha value
 }
@@ -38,7 +38,7 @@ class CMRET4Training(LightningModule):
         `~cmret.CMRETModel.from_checkpoint(...)`
 
         :param cmret: `~cmret.model.representation.CMRETModel` instance
-        :param hparam: training hyperparameters
+        :param hparam: training hyperparameters. See `~cmret.light_model.lightning_representation.DEFAULT_HPARAM`.
         """
         super().__init__()
         self.cmret = cmret

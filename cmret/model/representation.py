@@ -34,7 +34,7 @@ class CMRET(nn.Module):
         """
         CMRET upper representaton.
 
-        :param output: output model
+        :param output: output model from `~cmret.model.output`
         :param cutoff: cutoff radius
         :param n_kernel: number of RBF kernels
         :param n_atom_basis: number of atomic basis
@@ -42,7 +42,7 @@ class CMRET(nn.Module):
         :param rbf_type: type of rbf basis: 'bessel' or 'gaussian'
         :param num_head: number of attention head per layer
         :param temperature_coeff: temperature coefficient
-        :param dy: whether calculater -dy
+        :param dy: whether to calculate -dy
         """
         super().__init__()
         self.dy = dy

@@ -15,8 +15,8 @@ from cmret import CMRETModel, CMRET4Training
 root = Path(__file__).parent
 lightning_model_hparam = {
     "model_unit": "eV",
-    "lr_scheduler_factor": 0.8,
-    "lr_scheduler_patience": 30,
+    "lr_scheduler_factor": 0.9,
+    "lr_scheduler_patience": 50,
     "lr_scheduler_interval": "epoch",
     "lr_scheduler_frequency": 1,
     "lr_warnup_step": 1000,
@@ -56,7 +56,7 @@ def main():
     lightning_model = CMRET4Training(model, lightning_model_hparam)
 
     ckpt_callback = ModelCheckpoint(dirpath=workdir, monitor="val_loss")
-    earlystop_callback = EarlyStopping(monitor="val_loss", patience=60)
+    earlystop_callback = EarlyStopping(monitor="val_loss", patience=300)
     trainer = Trainer(
         max_epochs=args.nepoch,
         log_every_n_steps=20,

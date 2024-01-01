@@ -23,9 +23,9 @@ class CMRETCalculator(Calculator):
         self, model: nn.Module, device: Union[str, torch.device] = "cpu"
     ) -> None:
         """
-        ASE calculator class wrapping CMRET model.
+        ASE calculator class wrapper of CMRET model.
 
-        :param model: a trained CMRET model
+        :param model: a trained `~cmret.model.representation.CMRETModel` instance
         :param device: target device
         """
         super().__init__()
@@ -45,7 +45,7 @@ class CMRETCalculator(Calculator):
         """
         Calculate the properties.
 
-        :param atoms: ase.Atoms object
+        :param atoms: `~ase.Atoms` instance
         :param properties: implemented properties (not in use)
         :param system_changes: list of changes for ASE (not in use)
         :return: properties

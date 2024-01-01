@@ -103,7 +103,7 @@ def test(model: nn.Module, testdata: DataLoader) -> Dict[str, float]:
     """
     Test the trained network.
 
-    :param model: model for testing
+    :param model: a `~cmret.model.representation.CMRETModel` to be tested
     :param testdata: a `~torch.utils.data.DataLoader` instance containing test data
     :return: test metrics
     """

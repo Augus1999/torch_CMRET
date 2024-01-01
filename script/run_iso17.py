@@ -18,10 +18,10 @@ from cmret import CMRETModel, CMRET4Training
 root = Path(__file__).parent
 lightning_model_hparam = {
     "model_unit": "eV",
-    "lr_scheduler_factor": 0.8,
+    "lr_scheduler_factor": 0.9,
     "lr_scheduler_patience": 50,
     "lr_scheduler_interval": "step",
-    "lr_scheduler_frequency": 5000,
+    "lr_scheduler_frequency": 10000,
     "lr_warnup_step": 10000,
     "max_lr": 1e-3,
     "ema_alpha": 0.05,
