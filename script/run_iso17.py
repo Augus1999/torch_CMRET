@@ -22,7 +22,7 @@ lightning_model_hparam = {
     "lr_scheduler_patience": 50,
     "lr_scheduler_interval": "step",
     "lr_scheduler_frequency": 10000,
-    "lr_warnup_step": 10000,
+    "lr_warmup_step": 10000,
     "max_lr": 1e-3,
     "ema_alpha": 0.05,
 }

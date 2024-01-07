@@ -21,7 +21,7 @@ DEFAULT_HPARAM: Dict[str, Union[str, int, float]] = {
     "lr_scheduler_patience": 50,
     "lr_scheduler_interval": "epoch",  # can be "step" as well
     "lr_scheduler_frequency": 1,
-    "lr_warnup_step": 10000,
+    "lr_warmup_step": 10000,
     "max_lr": 1e-3,
     "ema_alpha": 0.05,  # EMA alpha value
 }
@@ -122,8 +122,8 @@ class CMRET4Training(LightningModule):
     def optimizer_step(self, *args, **kwargs) -> None:
         optimizer: Adam = kwargs["optimizer"] if "optimizer" in kwargs else args[2]
         # warn-up step
-        if self.trainer.global_step < self.hparams.lr_warnup_step:
-            lr_scale = int(self.trainer.global_step + 1) / self.hparams.lr_warnup_step
+        if self.trainer.global_step < self.hparams.lr_warmup_step:
+            lr_scale = int(self.trainer.global_step + 1) / self.hparams.lr_warmup_step
             lr_scale = min(1.0, lr_scale)
             for pg in optimizer.param_groups:
                 pg["lr"] = lr_scale * self.hparams.max_lr
