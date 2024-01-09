@@ -115,12 +115,12 @@ class Distance(nn.Module):
             d, d_key = d_min.values[None, :, :], d_min.indices
             vec = torch.gather(vecs, 0, d_key[None, :, :, None].repeat(1, 1, 1, 3))
             d_tril = torch.tril(d, -1)
-            d_triu = torch.triu(d, 0).transpose(-2, -1)
+            d_triu = torch.triu(d, 0).transpose_(-2, -1)
             d_tri = torch.cat([d_tril.unsqueeze(0), d_triu.unsqueeze(0)], 0)
             d_tri_min = torch.min(d_tri, dim=0)  # use symmetry
             d_tri, d_key = d_tri_min.values, d_tri_min.indices
-            vec_tril = vec * (d_tril != 0).float().unsqueeze(-1)
-            vec_triu = (vec * (d_triu == 0).float().unsqueeze(-1)).transpose(-2, -3)
+            vec_tril = vec * (d_tril != 0).float().unsqueeze_(-1)
+            vec_triu = (vec * (d_triu == 0).float().unsqueeze_(-1)).transpose(-2, -3)
             vec_tri = torch.cat([vec_tril, vec_triu], 0)
             vec = torch.gather(vec_tri, 0, d_key[:, :, :, None].repeat(1, 1, 1, 3))
             vec = vec - vec.transpose(-2, -3)
@@ -130,7 +130,7 @@ class Distance(nn.Module):
             vec = vec[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
             d = torch.linalg.norm(vec, 2, -1)
         vec_norm = vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
-        return d, vec_norm.unsqueeze(dim=-1)
+        return d, vec_norm.unsqueeze_(dim=-1)
 
 
 class ResML(nn.Module):
@@ -248,7 +248,7 @@ class NonLoacalInteraction(nn.Module):
         k_t = self.k(x).view(1, n_a, self.nh, self.d).permute(2, 0, 3, 1).contiguous()
         v = self.v(x).view(1, n_a, self.nh, self.d).permute(2, 0, 1, 3).contiguous()
         a = q @ k_t / self.tp
-        alpha = self.activate(a.masked_fill(batch_mask, -torch.inf))
+        alpha = self.activate(a.masked_fill_(batch_mask, -torch.inf))
         out = (alpha @ v).permute(1, 2, 0, 3).contiguous().view(1, n_a, n_f)
         if return_attn_matrix:
             return out, alpha.mean(dim=0)

@@ -121,7 +121,7 @@ class CMRET4Training(LightningModule):
 
     def optimizer_step(self, *args, **kwargs) -> None:
         optimizer: Adam = kwargs["optimizer"] if "optimizer" in kwargs else args[2]
-        # warn-up step
+        # warm-up step
         if self.trainer.global_step < self.hparams.lr_warmup_step:
             lr_scale = int(self.trainer.global_step + 1) / self.hparams.lr_warmup_step
             lr_scale = min(1.0, lr_scale)
