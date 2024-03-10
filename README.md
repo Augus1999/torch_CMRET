@@ -5,7 +5,7 @@ CMRET provides spin (S) and/or molecular charge (Q) awared machine learning forc
 ![python](https://img.shields.io/badge/Python-3.9%20|%203.10-blue.svg?color=dd9b65)
 ![torch](https://img.shields.io/badge/torch-2.0-blue?color=708ddd)
 ![black](https://img.shields.io/badge/code%20style-black-black)
-[![arxiv](https://img.shields.io/badge/arXiv-2308.10752-red)](https://arxiv.org/abs/2308.10752v1)
+[![arxiv](https://img.shields.io/badge/arXiv-2308.10752-red)](https://arxiv.org/abs/2308.10752)
 
 ## Requirements
 ```txt
