@@ -30,6 +30,7 @@ class ASEDataBaseClass(data.Dataset):
         file: str,
         limit: Optional[int] = None,
         idx_file: Optional[str] = None,
+        first_idx: int = 0,
         task: Optional[str] = None,
         use_pbc: bool = False,
     ) -> None:
@@ -39,6 +40,7 @@ class ASEDataBaseClass(data.Dataset):
         :param file: dataset file name <file>
         :param limit: item limit
         :param idx_file: index file name <file>
+        :param first_idx: the integer (0 or 1) represents the first index
         :param task: task name
         :param use_pbc: whether to apply PBC in a cell
         """
@@ -52,7 +54,7 @@ class ASEDataBaseClass(data.Dataset):
         if idx_file:
             with open(idx_file, "r") as f:
                 idx = f.readlines()
-            self.idx = [int(i) - 1 for i in idx]
+            self.idx = [int(i) - first_idx for i in idx]
 
     def __len__(self):
         length = len(self.data)
@@ -68,6 +70,7 @@ class XYZDataBaseClass(data.Dataset):
         file: str,
         limit: Optional[int] = None,
         idx_file: Optional[str] = None,
+        first_idx: int = 0,
         use_pbc: bool = False,
     ) -> None:
         """
@@ -76,6 +79,7 @@ class XYZDataBaseClass(data.Dataset):
         :param file: dataset file name <file>
         :param limit: item limit
         :param idx_file: index file name <file>
+        :param first_idx: the integer (0 or 1) represents the first index
         :param use_pbc: whether to apply PBC in a cell
         """
         super().__init__()
@@ -85,7 +89,7 @@ class XYZDataBaseClass(data.Dataset):
         if idx_file:
             with open(idx_file, "r") as f:
                 idx = f.readlines()
-            self.idx = [int(i) - 1 for i in idx]
+            self.idx = [int(i) - first_idx for i in idx]
 
     def __len__(self):
         length = len(self.data)
@@ -105,7 +109,7 @@ class ASEData(ASEDataBaseClass):
         charges = torch.tensor(d.numbers, dtype=torch.long)
         positions = torch.tensor(d.positions, dtype=torch.float32)
         mol = {"Z": charges, "R": positions}
-        lattice = torch.tensor(d.cell, dtype=torch.float32)
+        lattice = torch.tensor(d.cell.tolist(), dtype=torch.float32)
         if lattice.abs().sum() > 0:
             pbc = torch.tensor(d.pbc, dtype=torch.float32)
             if pbc.sum() > 0 and self.use_pbc:
@@ -135,7 +139,7 @@ class XYZData(XYZDataBaseClass):
         charges = torch.tensor(d.numbers, dtype=torch.long)
         positions = torch.tensor(d.positions, dtype=torch.float32)
         mol = {"Z": charges, "R": positions}
-        lattice = torch.tensor(d.cell, dtype=torch.float32)
+        lattice = torch.tensor(d.cell.tolist(), dtype=torch.float32)
         if lattice.abs().sum() > 0:
             pbc = torch.tensor(d.pbc, dtype=torch.float32)
             if pbc.sum() > 0 and self.use_pbc:

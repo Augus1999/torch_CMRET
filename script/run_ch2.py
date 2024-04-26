@@ -39,14 +39,7 @@ def main():
     log_dir = root / "logs"
 
     train_set = ASEData(f"{args.folder}/ch2_2000_train.db")
-    traindata = DataLoader(
-        train_set,
-        args.batchsize,
-        True,
-        num_workers=4,
-        collate_fn=collate,
-        persistent_workers=True,
-    )
+    traindata = DataLoader(train_set, args.batchsize, True, collate_fn=collate)
     test_set = ASEData(f"{args.folder}/ch2_2000_test.db")
     testdata = DataLoader(test_set, 20, collate_fn=collate)
 
@@ -67,7 +60,11 @@ def main():
     )
 
     trainer.fit(lightning_model, traindata, testdata)
+    lightning_model = CMRET4Training.load_from_checkpoint(
+        trainer.checkpoint_callback.best_model_path, lightning_model_hparam
+    )
     lightning_model.export_model(workdir)
+    model = lightning_model.cmret
 
     test_info = test(model=model, testdata=testdata)
     print("CH2:", test_info)

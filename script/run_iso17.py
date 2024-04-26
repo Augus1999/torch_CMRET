@@ -58,20 +58,17 @@ def main():
     log_dir = root / "logs"
 
     trainset = ASEData(
-        f"{args.folder}/reference.db", idx_file=f"{args.folder}/train_ids.txt"
+        f"{args.folder}/reference.db",
+        idx_file=f"{args.folder}/train_ids.txt",
+        first_idx=1,
     )
     valset = ASEData(
-        f"{args.folder}/reference.db", idx_file=f"{args.folder}/validation_ids.txt"
+        f"{args.folder}/reference.db",
+        idx_file=f"{args.folder}/validation_ids.txt",
+        first_idx=1,
     )
-    traindata = DataLoader(
-        trainset,
-        args.batchsize,
-        True,
-        num_workers=4,
-        collate_fn=collate,
-        persistent_workers=True,
-    )
-    valdata = DataLoader(valset, args.batchsize, num_workers=4, collate_fn=collate)
+    traindata = DataLoader(trainset, args.batchsize, True, collate_fn=collate)
+    valdata = DataLoader(valset, args.batchsize, collate_fn=collate)
 
     model = CMRETModel(n_interaction=args.nlayer, rbf_type=args.rbf, num_head=args.nh)
     lightning_model = CMRET4Training(model, lightning_model_hparam)
@@ -88,7 +85,11 @@ def main():
     )
 
     trainer.fit(lightning_model, traindata, valdata)
+    lightning_model = CMRET4Training.load_from_checkpoint(
+        trainer.checkpoint_callback.best_model_path, lightning_model_hparam
+    )
     lightning_model.export_model(workdir)
+    model = lightning_model.cmret
 
     test_within = ASEData(f"{args.folder}/test_within.db")
     test_within = DataLoader(test_within, 20, collate_fn=collate)

@@ -140,21 +140,25 @@ def test(model: nn.Module, testdata: DataLoader) -> Dict[str, float]:
 
 
 def split_data(
-    file_name: Union[str, Path], train_split_idx: List, test_split_idx: List
+    file_name: Union[str, Path],
+    train_idx: List[int],
+    test_idx: List[int],
+    val_idx: List[int],
 ) -> None:
     """
     Split a dataset to file_name-train.xyz and file_name-test.xyz files.
 
     :param file_name: file to be splited <file>
-    :param train_split_idx: indeces of training data
-    :param test_split_idx: indeces of testing data
+    :param train_idx: indeces of training data
+    :param test_idx: indeces of testing data
+    :param val_idx: indices of validation data
     :return: None
     """
     assert str(file_name).endswith(".xyz"), "Unsupported format..."
     with open(file_name, mode="r", encoding="utf-8") as f:
         lines = f.readlines()
     line_indexes = []
-    lines_group, lines_train, lines_test = [], [], []
+    lines_group, lines_train, lines_test, lines_val = [], [], [], []
     for idx, line in enumerate(lines):
         try:
             int(line)
@@ -172,20 +176,27 @@ def split_data(
             pass
         lines_group.append(mol_info)
     for key, i in enumerate(lines_group):
-        if key in train_split_idx:
+        if key in train_idx:
             for j in i:
                 lines_train.append(j)
-        if key in test_split_idx:
+        if key in test_idx:
             for j in i:
                 lines_test.append(j)
+        if key in val_idx:
+            for j in i:
+                lines_val.append(j)
     with open(
-        str(file_name).replace(".xyz", "-train.xyz"), mode="w", encoding="utf-8"
+        str(file_name).replace(".xyz", "_train.xyz"), mode="w", encoding="utf-8"
     ) as sf:
         sf.writelines(lines_train)
     with open(
-        str(file_name).replace(".xyz", "-test.xyz"), mode="w", encoding="utf-8"
+        str(file_name).replace(".xyz", "_test.xyz"), mode="w", encoding="utf-8"
     ) as sf:
         sf.writelines(lines_test)
+    with open(
+        str(file_name).replace(".xyz", "_val.xyz"), mode="w", encoding="utf-8"
+    ) as sf:
+        sf.writelines(lines_val)
 
 
 if __name__ == "__main__":
