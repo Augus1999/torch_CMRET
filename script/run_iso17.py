@@ -95,9 +95,9 @@ def main():
     test_within = DataLoader(test_within, 20, collate_fn=collate)
     test_other = ASEData(f"{args.folder}/test_other.db")
     test_other = DataLoader(test_other, 20, collate_fn=collate)
-    info_within = test(model=model, dataset=test_within)
+    info_within = test(model=model, testdata=test_within)
     print("ISO17: within", info_within)
-    info_other = test(model=model, dataset=test_other)
+    info_other = test(model=model, testdata=test_other)
     print("ISO17: other", info_other)
 
 
