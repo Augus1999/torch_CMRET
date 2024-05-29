@@ -4,15 +4,25 @@
 train and test on singlet/triplet CH2 dataset
 """
 import argparse
+import datetime
 from pathlib import Path
 from torch.utils.data import DataLoader
+import pytorch_lightning as pl
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from cmret.utils import test, ASEData, collate
 from cmret import CMRETModel, CMRET4Training
+import wandb
 
+import sys
+import os
+
+user_home = os.path.expanduser("~")
+torch_CMRET_path = os.path.join(user_home, "torch_CMRET")
+sys.path.append(torch_CMRET_path)
 
 root = Path(__file__).parent
+
 lightning_model_hparam = {
     "model_unit": "eV",
     "lr_scheduler_factor": 0.9,
@@ -48,12 +58,22 @@ def main():
     )
     lightning_model = CMRET4Training(model, lightning_model_hparam)
 
+    run_name = f"run_ch2_{args.nlayer}_{args.nh}_{args.rbf}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+    logger = pl.loggers.TensorBoardLogger(
+        save_dir=workdir,
+        name=run_name,
+        version=0)
+
+    wandb.init(project="CMRET", sync_tensorboard=True)
+
     ckpt_callback = ModelCheckpoint(dirpath=workdir, monitor="val_loss")
     earlystop_callback = EarlyStopping(monitor="val_loss", patience=300)
+
     trainer = Trainer(
         max_epochs=args.nepoch,
         log_every_n_steps=20,
         default_root_dir=log_dir,
+        logger=logger,
         callbacks=[ckpt_callback, earlystop_callback],
         gradient_clip_val=5.0,
         gradient_clip_algorithm="value",
