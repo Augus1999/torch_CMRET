@@ -3,6 +3,7 @@
 """
 train and test on ISO17 dataset
 """
+import datetime
 import argparse
 from pathlib import Path
 from typing import Dict, Union
@@ -10,6 +11,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 from lightning import Trainer
+from lightning.pytorch import loggers
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from cmret.utils import test, ASEDataBaseClass, collate
 from cmret import CMRETModel, CMRET4Training
@@ -52,6 +54,7 @@ def main():
     parser.add_argument("--nepoch", default=400, type=int, help="number epochs")
     parser.add_argument("--rbf", default="gaussian", type=str, help="RBF type")
     parser.add_argument("--folder", default=".", type=str, help="the dataset folder")
+    parser.add_argument("--wandb", default=False, type=bool, help="enable W&B or not")
     args = parser.parse_args()
 
     workdir = root / "chkpts/iso17"
@@ -73,20 +76,39 @@ def main():
     model = CMRETModel(n_interaction=args.nlayer, rbf_type=args.rbf, num_head=args.nh)
     lightning_model = CMRET4Training(model, lightning_model_hparam)
 
+    if args.wandb:
+        logger = loggers.WandbLogger(
+            f"run_iso17_{args.nlayer}_{args.nh}_{args.rbf}",
+            log_dir,
+            datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+            project="CMRET",
+            job_type="train",
+        )
+    else:
+        logger = loggers.TensorBoardLogger(
+            log_dir,
+            f"run_iso17_{args.nlayer}_{args.nh}_{args.rbf}",
+            datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+        )
     ckpt_callback = ModelCheckpoint(dirpath=workdir, monitor="val_loss")
     earlystop_callback = EarlyStopping(monitor="val_loss", patience=60)
     trainer = Trainer(
         max_epochs=args.nepoch,
+        logger=logger,
         log_every_n_steps=1000,
-        default_root_dir=log_dir,
         callbacks=[ckpt_callback, earlystop_callback],
         gradient_clip_val=5.0,
         gradient_clip_algorithm="value",
     )
 
+    if args.wandb:
+        import wandb
+
+        wandb.init(project="CMRET", sync_tensorboard=True)
+
     trainer.fit(lightning_model, traindata, valdata)
     lightning_model = CMRET4Training.load_from_checkpoint(
-        trainer.checkpoint_callback.best_model_path, lightning_model_hparam
+        trainer.checkpoint_callback.best_model_path, cmret=model
     )
     lightning_model.export_model(workdir)
     model = lightning_model.cmret
