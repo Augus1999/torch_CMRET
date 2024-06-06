@@ -101,11 +101,6 @@ def main():
         gradient_clip_algorithm="value",
     )
 
-    if args.wandb:
-        import wandb
-
-        wandb.init(project="CMRET", sync_tensorboard=True)
-
     trainer.fit(lightning_model, traindata, valdata)
     lightning_model = CMRET4Training.load_from_checkpoint(
         trainer.checkpoint_callback.best_model_path, cmret=model
