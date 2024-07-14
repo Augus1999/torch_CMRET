@@ -65,7 +65,7 @@ class CosinCutOff(nn.Module):
         :param cutoff: cutoff radius
         """
         super().__init__()
-        self.register_buffer("cutoff", Tensor([cutoff]))
+        self.register_buffer("cutoff", torch.tensor([cutoff]))
 
     def forward(self, d: Tensor) -> Tensor:
         """
