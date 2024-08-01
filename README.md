@@ -1,5 +1,5 @@
 # Comprehensive Molecular Representation from Equivariant Transformer
-CMRET provides spin (S) and/or molecular charge (Q) awared machine learning force fields. Note this is still an experimental project.
+CMRET provides spin (S) and/or molecular charge (Q) awared machine learning force fields.
 
 ![OS](https://img.shields.io/badge/OS-Windows%20|%20Linux%20|%20macOS-blue?color=00b166)
 ![python](https://img.shields.io/badge/Python-3.9%20|%203.10-blue.svg?color=dd9b65)
