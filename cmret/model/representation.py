@@ -112,10 +112,6 @@ class CMRET(nn.Module):
             v_ = v.repeat(s_info.shape[0], 1, 1, 1) * batch[:, :, :, None]
             v_ = v_ + s_info[:, :, None, None]
             v = v_[batch.squeeze(-1) != 0].view(v.shape)
-        # --------- compute loop mask that removes the self-loop ----------------
-        loop_mask = torch.eye(z.shape[-1], device=z.device)
-        loop_mask = loop_mask[None, :, :] == 0
-        # -----------------------------------------------------------------------
         s = self.embedding(z)
         o = torch.zeros_like(s)
         # ---- compute batch mask that seperates atoms in different molecules ----
@@ -123,15 +119,8 @@ class CMRET(nn.Module):
         batch_mask = batch_mask_[None, :, :, None]  # shape: (1, n_a, n_a, 1)
         batch_mask_ = batch_mask_ == 0  # shape: (n_a, n_a)
         # ------------------------------------------------------------------------
-        d, vec_norm, idxs = self.distance(r, batch_mask, loop_mask, lattice)
+        d, vec_norm, idxs = self.distance(r, batch_mask, lattice)
         cutoff = self.cutoff(d).unsqueeze(dim=-1)
-        cutoff.masked_fill_((d == 0)[:, :, :, None], 0)
-        """
-        old code
-
-        h = batch_mask.shape[1]
-        cutoff *= batch_mask[loop_mask].view(1, h, h - 1, 1)
-        """
         e = self.rbf(d) * cutoff
         attn = []
         for layer in self.interaction:

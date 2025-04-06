@@ -74,6 +74,7 @@ class CosinCutOff(nn.Module):
         """
         cutoff = 0.5 * (torch.pi * d / self.cutoff).cos() + 0.5
         cutoff *= (d <= self.cutoff).float()
+        cutoff.masked_fill_(d == torch.inf, 0)  # reomve 'off-diagonal' elements
         return cutoff
 
 
@@ -88,16 +89,11 @@ class Distance(nn.Module):
         self.k = max_neighbour
 
     def forward(
-        self,
-        r: Tensor,
-        batch_mask: Tensor,
-        loop_mask: Tensor,
-        lattice: Optional[Tensor] = None,
+        self, r: Tensor, batch_mask: Tensor, lattice: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor, Tensor]:
         """
         :param r: nuclear coordinates;    shape: (1, n_a, 3)
         :param batch_mask: batch mask;    shape: (1, n_a, n_a, 1)
-        :param loop_mask: loop mask;      shape: (1, n_a, n_a)
         :param lattice: lattice vectors;  shape: (1, n_a, 3, 3)
         :return: d, vec_norm, idxs;       shape: (1, n_a, k), (1, n_a, k, 3, 1), (1, n_a, k)
         """
@@ -105,6 +101,7 @@ class Distance(nn.Module):
         k = min(self.k, n_a - 1)
         vec = r[:, :, None, :] - r[:, None, :, :]
         vec = vec * batch_mask  # reomve 'off-diagonal' elements
+        loop_mask = torch.eye(n_a, device=r.device)[None, :, :] == 0
         if lattice is not None:
             # compute distances under periodic boundary conditions
             r_shift1 = r + lattice[::, ::, 0]
@@ -134,10 +131,8 @@ class Distance(nn.Module):
             vec = vec[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
             d = torch.linalg.norm(vec, 2, -1)
         vec_norm = vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
-        # return d, vec_norm.unsqueeze_(dim=-1)  # old code
         edge = (-d.masked_fill(d == 0, torch.inf)).topk(k, dim=-1)
         d, idxs = -edge.values, edge.indices
-        d = d.masked_fill_(d == torch.inf, 0)
         vec_idxs = idxs[:, :, :, None].repeat(1, 1, 1, 3)
         vec_norm = vec_norm.gather(dim=-2, index=vec_idxs).unsqueeze_(dim=-1)
         return d, vec_norm, idxs
@@ -268,7 +263,6 @@ class NonLoacalInteraction(nn.Module):
         a = q @ k_t / self.tp
         alpha = self.activate(a.masked_fill_(batch_mask, -torch.inf))
         out = (alpha @ v).permute(1, 2, 0, 3).contiguous().view(1, n_a, n_f)
-
         if return_attn_matrix:
             return out, alpha.mean(dim=0)
         return out, None
