@@ -23,6 +23,7 @@ class CMRET(nn.Module):
         self,
         output: nn.Module,
         cutoff: float = 5.0,
+        max_neighbour: int = 15,
         n_kernel: int = 50,
         n_atom_basis: int = 128,
         n_interaction: int = 6,
@@ -36,6 +37,7 @@ class CMRET(nn.Module):
 
         :param output: output model from `~cmret.model.output`
         :param cutoff: cutoff radius
+        :param max_neighbour: maximum number of neighbour-atoms
         :param n_kernel: number of RBF kernels
         :param n_atom_basis: number of atomic basis
         :param n_interaction: number of interaction blocks
@@ -48,7 +50,7 @@ class CMRET(nn.Module):
         self.dy = dy
         self.n = n_atom_basis
         self.embedding = Embedding(embedding_dim=n_atom_basis)
-        self.distance = Distance()
+        self.distance = Distance(max_neighbour=max_neighbour)
         if rbf_type == "bessel":
             self.rbf = RBF1(cell=cutoff, n_kernel=n_kernel)
         elif rbf_type == "gaussian":
@@ -121,10 +123,15 @@ class CMRET(nn.Module):
         batch_mask = batch_mask_[None, :, :, None]  # shape: (1, n_a, n_a, 1)
         batch_mask_ = batch_mask_ == 0  # shape: (n_a, n_a)
         # ------------------------------------------------------------------------
-        d, vec_norm = self.distance(r, batch_mask, loop_mask, lattice)
+        d, vec_norm, idxs = self.distance(r, batch_mask, loop_mask, lattice)
         cutoff = self.cutoff(d).unsqueeze(dim=-1)
+        cutoff.masked_fill_((d == 0)[:, :, :, None], 0)
+        """
+        old code
+
         h = batch_mask.shape[1]
         cutoff *= batch_mask[loop_mask].view(1, h, h - 1, 1)
+        """
         e = self.rbf(d) * cutoff
         attn = []
         for layer in self.interaction:
@@ -134,8 +141,8 @@ class CMRET(nn.Module):
                 v=v,
                 e=e,
                 vec_norm=vec_norm,
+                idxs=idxs,
                 mask=cutoff,
-                loop_mask=loop_mask,
                 batch_mask=batch_mask_,
                 return_attn_matrix=return_attn_matrix,
             )
@@ -155,10 +162,11 @@ class CMRETModel(nn.Module):
     def __init__(
         self,
         cutoff: float = 5.0,
+        max_neighbour: int = 15,
         n_kernel: int = 50,
         n_atom_basis: int = 128,
         n_interaction: int = 6,
-        n_output: int = 2,
+        n_output: int = 4,
         rbf_type: str = "gaussian",
         num_head: int = 4,
         temperature_coeff: float = 2.0,
@@ -168,6 +176,7 @@ class CMRETModel(nn.Module):
         CMRET model.
 
         :param cutoff: cutoff radius
+        :param max_neighbour: maximum number of neighbour-atoms
         :param n_kernel: number of RBF kernels
         :param n_atom_basis: number of atomic basis
         :param n_interaction: number of interaction blocks
@@ -203,6 +212,7 @@ class CMRETModel(nn.Module):
         self.model = CMRET(
             output=out,
             cutoff=cutoff,
+            max_neighbour=max_neighbour,
             n_kernel=n_kernel,
             n_atom_basis=n_atom_basis,
             n_interaction=n_interaction,
@@ -213,6 +223,7 @@ class CMRETModel(nn.Module):
         )
         self.args = dict(
             cutoff=cutoff,
+            max_neighbour=max_neighbour,
             n_kernel=n_kernel,
             n_atom_basis=n_atom_basis,
             n_interaction=n_interaction,
@@ -257,12 +268,17 @@ class CMRETModel(nn.Module):
         :return: stored model
         """
         with open(file, mode="rb") as f:
-            state_dict = torch.load(f, map_location="cpu")
+            state_dict = torch.load(f, map_location="cpu", weights_only=True)
         nn = state_dict["nn"]
         args = state_dict["args"]
         unit = state_dict["unit"]
-        model = CMRETModel(
+        # ---- to be compatible with old versions ----
+        if "max_neighbour" not in args:
+            args["max_neighbour"] = 150
+        # --------------------------------------------
+        model = cls(
             cutoff=args["cutoff"],
+            max_neighbour=args["max_neighbour"],
             n_kernel=args["n_kernel"],
             n_atom_basis=args["n_atom_basis"],
             n_interaction=args["n_interaction"],

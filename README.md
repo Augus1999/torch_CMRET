@@ -1,17 +1,15 @@
 # Comprehensive Molecular Representation from Equivariant Transformer
-CMRET provides spin (S) and/or molecular charge (Q) awared machine learning force fields.
 
-![OS](https://img.shields.io/badge/OS-Windows%20|%20Linux%20|%20macOS-blue?color=00b166)
-![python](https://img.shields.io/badge/Python-3.9%20|%203.10-blue.svg?color=dd9b65)
-![torch](https://img.shields.io/badge/torch-2.0-blue?color=708ddd)
-![black](https://img.shields.io/badge/code%20style-black-black)
 [![arxiv](https://img.shields.io/badge/arXiv-2308.10752-red)](https://arxiv.org/abs/2308.10752)
+
+CMRET provides spin (S) and/or molecular charge (Q) awared machine learning force fields.
 
 ## Requirements
 ```txt
 torch>=2.0.0
 ase>=3.22.0
 lightning>=2.1.2
+typing_extensions>=4.12.0
 ```
 
 ## Usage
@@ -37,3 +35,5 @@ See examples:
       primaryClass={physics.comp-ph}
 }
 ```
+
+## We Stand With Ukraine

@@ -10,5 +10,5 @@ from .checkpoints import trained_model
 from .lightning_model import CMRET4Training
 
 __all__ = ["CMRETModel", "utils", "trained_model", "CMRET4Training"]
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = "Nianze A. Tao (Omozawa Sueno)"

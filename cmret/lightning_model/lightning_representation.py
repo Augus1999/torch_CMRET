@@ -9,7 +9,7 @@ from lightning import LightningModule
 import torch
 import torch.nn as nn
 from torch import Tensor
-from torch.optim import Adam
+from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from ..model import CMRETModel
 from ..utils.tools import loss_calc
@@ -102,7 +102,7 @@ class CMRET4Training(LightningModule):
                 self.log("val_loss", val_loss_dict["vector"].item(), batch_size=nb)
 
     def configure_optimizers(self) -> Dict:
-        optimizer = Adam(self.parameters(), 1e-8, amsgrad=False)
+        optimizer = AdamW(self.parameters(), 1e-8, amsgrad=False)
         scheduler = ReduceLROnPlateau(
             optimizer,
             "min",
@@ -120,7 +120,7 @@ class CMRET4Training(LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
 
     def optimizer_step(self, *args, **kwargs) -> None:
-        optimizer: Adam = kwargs["optimizer"] if "optimizer" in kwargs else args[2]
+        optimizer: AdamW = kwargs["optimizer"] if "optimizer" in kwargs else args[2]
         # warm-up step
         if self.trainer.global_step < self.hparams.lr_warmup_step:
             lr_scale = int(self.trainer.global_step + 1) / self.hparams.lr_warmup_step
