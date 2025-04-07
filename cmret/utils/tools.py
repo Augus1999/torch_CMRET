@@ -48,7 +48,9 @@ def collate(batch: List) -> Dict[str, Tensor]:
                                 "lattice": lattice vectors (optional)
                                 "batch": batch mask (for instance molecule A has 4 atoms
                                                      and molecule B has 3 atoms then the
-                                                     batched indices is [[1, 1, 1, 1, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]])
+                                                     batched indices is
+                                                     `torch.tensor([[1, 1, 1, 1, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]])[..., None]`
+                                                     )
                       }
     """
     mol = [i["mol"] for i in batch]

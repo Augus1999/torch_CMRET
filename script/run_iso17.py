@@ -6,14 +6,12 @@ train and test on ISO17 dataset
 import datetime
 import argparse
 from pathlib import Path
-from typing import Dict, Union
 import torch
-from torch import Tensor
 from torch.utils.data import DataLoader
 from lightning import Trainer
 from lightning.pytorch import loggers
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
-from cmret.utils import test, ASEDataBaseClass, collate
+from cmret.utils import test, ASEData, collate
 from cmret import CMRETModel, CMRET4Training
 
 
@@ -30,20 +28,10 @@ lightning_model_hparam = {
 }
 
 
-class ASEData(ASEDataBaseClass):
-    def __getitem__(self, idx: Union[int, Tensor]) -> Dict[str, Dict[str, Tensor]]:
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-        if self.idx:
-            idx = self.idx[idx]
-        d = self.data[idx]
-        charges = torch.tensor(d.toatoms().numbers, dtype=torch.long)
-        positions = torch.tensor(d.toatoms().positions, dtype=torch.float32)
-        forces = torch.tensor(d.data["atomic_forces"], dtype=torch.float32)
-        energy = torch.tensor([d["total_energy"]], dtype=torch.float32)
-        mol = {"Z": charges, "R": positions}
-        label = {"scalar": energy, "vector": forces}
-        return {"mol": mol, "label": label}
+def encode(atoms):
+    energy = torch.tensor([atoms["total_energy"]], dtype=torch.float32)
+    forces = torch.tensor(atoms.data["atomic_forces"], dtype=torch.float32)
+    return {"scalar": energy, "vector": forces}
 
 
 def main():
@@ -65,11 +53,13 @@ def main():
         idx_file=f"{args.folder}/train_ids.txt",
         first_idx=1,
     )
+    trainset.map(encode)
     valset = ASEData(
         f"{args.folder}/reference.db",
         idx_file=f"{args.folder}/validation_ids.txt",
         first_idx=1,
     )
+    valset.map(encode)
     traindata = DataLoader(trainset, args.batchsize, True, collate_fn=collate)
     valdata = DataLoader(valset, args.batchsize, collate_fn=collate)
 
@@ -109,8 +99,10 @@ def main():
     model = lightning_model.cmret
 
     test_within = ASEData(f"{args.folder}/test_within.db")
+    test_within.map(encode)
     test_within = DataLoader(test_within, 20, collate_fn=collate)
     test_other = ASEData(f"{args.folder}/test_other.db")
+    test_other.map(encode)
     test_other = DataLoader(test_other, 20, collate_fn=collate)
     info_within = test(model=model, testdata=test_within)
     print("ISO17: within", info_within)

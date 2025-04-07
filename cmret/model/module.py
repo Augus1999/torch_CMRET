@@ -24,8 +24,8 @@ class RBF1(nn.Module):
 
     def forward(self, d: Tensor) -> Tensor:
         """
-        :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
-        :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
+        :param d: a tensor of distances;  shape: (1, n_a, k)
+        :return: RBF-extanded distances;  shape: (1, n_a, k, n_k)
         """
         out = (torch.pi * self.offsets * d[:, :, :, None] / self.cell).sin()
         return out / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
@@ -50,8 +50,8 @@ class RBF2(nn.Module):
 
     def forward(self, d: Tensor) -> Tensor:
         """
-        :param d: a tensor of distances;  shape: (1, n_a, n_a - 1)
-        :return: RBF-extanded distances;  shape: (1, n_a, n_a - 1, n_k)
+        :param d: a tensor of distances;  shape: (1, n_a, k)
+        :return: RBF-extanded distances;  shape: (1, n_a, k, n_k)
         """
         out = (-self.coeff * ((-d[:, :, :, None]).exp() - self.offsets).pow(2)).exp()
         return out
@@ -69,12 +69,11 @@ class CosinCutOff(nn.Module):
 
     def forward(self, d: Tensor) -> Tensor:
         """
-        :param d: pair-wise distances;     shape: (1, n_a, n_a - 1)
-        :return: cutoff mask;              shape: (1, n_a, n_a - 1)
+        :param d: pair-wise distances;     shape: (1, n_a, k)
+        :return: cutoff mask;              shape: (1, n_a, k)
         """
         cutoff = 0.5 * (torch.pi * d / self.cutoff).cos() + 0.5
-        cutoff *= (d <= self.cutoff).float()
-        cutoff.masked_fill_(d == torch.inf, 0)  # reomve 'off-diagonal' elements
+        cutoff.masked_fill_(d > self.cutoff, 0)
         return cutoff
 
 
@@ -97,10 +96,10 @@ class Distance(nn.Module):
         :param lattice: lattice vectors;  shape: (1, n_a, 3, 3)
         :return: d, vec_norm, idxs;       shape: (1, n_a, k), (1, n_a, k, 3, 1), (1, n_a, k)
         """
-        n_b, n_a, _ = r.shape
+        n_a = r.shape[1]
         k = min(self.k, n_a - 1)
         vec = r[:, :, None, :] - r[:, None, :, :]
-        vec = vec * batch_mask  # reomve 'off-diagonal' elements
+        vec.masked_fill_(batch_mask, torch.inf)  # mask the 'off-diagonal' elements
         loop_mask = torch.eye(n_a, device=r.device)[None, :, :] == 0
         if lattice is not None:
             # compute distances under periodic boundary conditions
@@ -125,13 +124,13 @@ class Distance(nn.Module):
             vec_tri = torch.cat([vec_tril, vec_triu], 0)
             vec = torch.gather(vec_tri, 0, d_key[:, :, :, None].repeat(1, 1, 1, 3))
             vec = vec - vec.transpose(-2, -3)
-            vec = vec[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
+            vec = vec[loop_mask].view(1, n_a, n_a - 1, 3)  # remove 0 vectors
             d = (d_tri + d_tri.transpose(-2, -1))[loop_mask].view(1, n_a, n_a - 1)
         else:
-            vec = vec[loop_mask].view(n_b, n_a, n_a - 1, 3)  # remove 0 vectors
+            vec = vec[loop_mask].view(1, n_a, n_a - 1, 3)  # remove 0 vectors
             d = torch.linalg.norm(vec, 2, -1)
-        vec_norm = vec / d.masked_fill(d == 0, torch.inf)[:, :, :, None]
-        edge = (-d.masked_fill(d == 0, torch.inf)).topk(k, dim=-1)
+        vec_norm = vec.masked_fill(vec == torch.inf, 0) / d[:, :, :, None]
+        edge = (-d).topk(k, dim=-1)
         d, idxs = -edge.values, edge.indices
         vec_idxs = idxs[:, :, :, None].repeat(1, 1, 1, 3)
         vec_norm = vec_norm.gather(dim=-2, index=vec_idxs).unsqueeze_(dim=-1)
@@ -198,20 +197,13 @@ class CFConv(nn.Module):
     ) -> Tuple[Tensor, Tensor, Tensor]:
         """
         :param x: input info;              shape: (1, n_a, n_f)
-        :param e: extended tensor;         shape: (1, n_a, n_a - 1, n_k)
+        :param e: extended tensor;         shape: (1, n_a, k, n_k)
         :param idxs: neighbour indices;    shape: (1, n_a, k)
         :param mask: neighbour mask;       shape: (1, n_a, k, 1)
         :return: convoluted scalar info;   shape: (1, n_a, k, n_f) * 3
         """
         w1, w2 = self.w1(e), self.w2(e)
         x = self.phi(x)
-        """
-        old code
-
-        _, n_a, f = x.shape
-        x_nbs = x[:, None, :, :].repeat(1, n_a, 1, 1)
-        x_nbs = x_nbs[loop_mask].view(1, n_a, n_a - 1, f)
-        """
         x_nbs = x[0][idxs]
         v1 = x[:, :, None, :] * w1 * mask
         v2 = x_nbs * w2 * mask

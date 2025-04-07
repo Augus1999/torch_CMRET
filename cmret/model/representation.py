@@ -72,6 +72,14 @@ class CMRET(nn.Module):
         self.norm = nn.LayerNorm(normalized_shape=n_atom_basis)
         self.out = output
 
+    def _construct_v(
+        self, z: Tensor, v: Tensor, info: Tensor, batch: Tensor, scale: int = 1
+    ) -> Tensor:
+        n_b = info.shape[0]
+        info = info / (z.repeat(n_b, 1) * batch.squeeze(-1)).sum(-1, True)
+        v_ = v.repeat(n_b, 1, 1, 1) * batch[..., None] + info[..., None, None] * scale
+        return v_[batch.squeeze(-1) != 0].view(v.shape)
+
     def forward(
         self,
         mol: Dict[str, Tensor],
@@ -99,25 +107,14 @@ class CMRET(nn.Module):
             lattice = mol["lattice"]
             lattice = (lattice[:, None, :, :] * batch[:, :, :, None]).sum(0, True)
         if "Q" in mol:
-            q_info = mol["Q"]
-            z_info = z.repeat(q_info.shape[0], 1) * batch.squeeze(dim=-1)
-            q_info = q_info / z_info.sum(dim=-1, keepdim=True)
-            v_ = v.repeat(q_info.shape[0], 1, 1, 1) * batch[:, :, :, None]
-            v_ = v_ - q_info[:, :, None, None]
-            v = v_[batch.squeeze(-1) != 0].view(v.shape)
+            v = self._construct_v(z, v, mol["Q"], batch, -1)
         if "S" in mol:
-            s_info = mol["S"]
-            z_info = z.repeat(s_info.shape[0], 1) * batch.squeeze(dim=-1)
-            s_info = s_info / z_info.sum(dim=-1, keepdim=True)
-            v_ = v.repeat(s_info.shape[0], 1, 1, 1) * batch[:, :, :, None]
-            v_ = v_ + s_info[:, :, None, None]
-            v = v_[batch.squeeze(-1) != 0].view(v.shape)
+            v = self._construct_v(z, v, mol["S"], batch, 1)
         s = self.embedding(z)
         o = torch.zeros_like(s)
         # ---- compute batch mask that seperates atoms in different molecules ----
-        batch_mask_ = batch.squeeze(-1).transpose(-2, -1) @ batch.squeeze(-1)
+        batch_mask_ = batch.squeeze(-1).transpose(-2, -1) @ batch.squeeze(-1) == 0
         batch_mask = batch_mask_[None, :, :, None]  # shape: (1, n_a, n_a, 1)
-        batch_mask_ = batch_mask_ == 0  # shape: (n_a, n_a)
         # ------------------------------------------------------------------------
         d, vec_norm, idxs = self.distance(r, batch_mask, lattice)
         cutoff = self.cutoff(d).unsqueeze(dim=-1)
