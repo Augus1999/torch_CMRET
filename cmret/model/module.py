@@ -233,7 +233,6 @@ class NonLoacalInteraction(nn.Module):
         self.q = nn.Linear(in_features=n_feature, out_features=n_feature, bias=True)
         self.k = nn.Linear(in_features=n_feature, out_features=n_feature, bias=True)
         self.v = nn.Linear(in_features=n_feature, out_features=n_feature, bias=True)
-        self.activate = nn.Softmax(dim=-1)
 
     def forward(
         self, x: Tensor, batch_mask: Tensor, return_attn_matrix: bool = False
@@ -253,7 +252,7 @@ class NonLoacalInteraction(nn.Module):
         k_t = self.k(x).view(1, n_a, self.nh, self.d).permute(2, 0, 3, 1).contiguous()
         v = self.v(x).view(1, n_a, self.nh, self.d).permute(2, 0, 1, 3).contiguous()
         a = q @ k_t / self.tp
-        alpha = self.activate(a.masked_fill_(batch_mask, -torch.inf))
+        alpha = torch.softmax(a.masked_fill_(batch_mask, -torch.inf), dim=-1)
         out = (alpha @ v).permute(1, 2, 0, 3).contiguous().view(1, n_a, n_f)
         if return_attn_matrix:
             return out, alpha.mean(dim=0)
